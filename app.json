@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "passwort-manager",
+    "slug": "passwort-manager",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./icon.png",
+        "backgroundColor": "#121212"
+      }
+    },
+    "owner": "oc2003",
+    "extra": {
+      "eas": {
+        "projectId": "528236ac-3589-41b4-8154-5e000ca69c1c"
+      }
+    }
+  }
+}
