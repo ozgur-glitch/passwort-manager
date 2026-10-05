@@ -16,11 +16,11 @@ import {
   AppState,
   PanResponder,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
-const STORAGE_KEY = '@passwords_key_v1';
-const MASTER_KEY = '@master_password_v1';
-const THEME_KEY = '@theme_mode_v1';
+const STORAGE_KEY = 'passwords_key_v1';
+const MASTER_KEY = 'master_password_v1';
+const THEME_KEY = 'theme_mode_v1';
 const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // Auto-Lock nach 3 Minuten Inaktivität
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000; // 1 Jahr in Millisekunden
 
@@ -71,7 +71,6 @@ const getPasswordStrength = (pwd) => {
 
 // --- HILFSFUNKTION FÜR PASSWORT-ALTER ---
 const isPasswordOlderThanOneYear = (createdAt, id) => {
-  // Verwendet createdAt oder versucht id als Fallback-Zeitstempel zu nutzen
   const createdTime = createdAt || (Number(id) ? Number(id) : null);
   if (!createdTime) return false;
   return Date.now() - createdTime > ONE_YEAR_MS;
@@ -105,11 +104,11 @@ export default function App() {
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [backupInputText, setBackupInputText] = useState('');
 
-  // --- NEUE STATES: SUCHLEISTE & FILTER ---
+  // SUCHLEISTE & FILTER
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('all'); // 'all', 'weak', 'reused'
+  const [filterType, setFilterType] = useState('all');
 
-  // --- NEUE STATES: GENERATOR OPTIONEN ---
+  // GENERATOR OPTIONEN
   const [genLength, setGenLength] = useState(16);
   const [genIncludeUpper, setGenIncludeUpper] = useState(true);
   const [genIncludeLower, setGenIncludeLower] = useState(true);
@@ -117,10 +116,10 @@ export default function App() {
   const [genIncludeSymbols, setGenIncludeSymbols] = useState(true);
   const [showGenSettings, setShowGenSettings] = useState(false);
 
-  // --- NEUE STATES: GESUNDHEITS-CHECK MODAL ---
+  // GESUNDHEITS-CHECK MODAL
   const [showHealthCheck, setShowHealthCheck] = useState(false);
 
-  // --- AUTO-LOCK & INAKTIVITÄTS-TIMER ---
+  // AUTO-LOCK & INAKTIVITÄTS-TIMER
   const timerRef = useRef(null);
   const activeMasterPwRef = useRef(savedMasterPw);
   activeMasterPwRef.current = savedMasterPw;
@@ -140,7 +139,6 @@ export default function App() {
     setShowPasswordId(null);
   };
 
-  // AppState Überwachung (Lock bei Hintergrundwechsel)
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState.match(/inactive|background/)) {
@@ -150,7 +148,6 @@ export default function App() {
     return () => subscription.remove();
   }, []);
 
-  // PanResponder fängt Benutzer-Gesten zur Timer-Rücksetzung ab
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponderCapture: () => {
@@ -169,10 +166,10 @@ export default function App() {
     await checkMasterPassword();
   };
 
-  // --- THEME SPEICHERUNG ---
+  // --- THEME SPEICHERUNG (SECURE STORE) ---
   const loadTheme = async () => {
     try {
-      const savedTheme = await AsyncStorage.getItem(THEME_KEY);
+      const savedTheme = await SecureStore.getItemAsync(THEME_KEY);
       if (savedTheme !== null) {
         setIsDarkMode(savedTheme === 'dark');
       }
@@ -185,16 +182,16 @@ export default function App() {
     try {
       const nextMode = !isDarkMode;
       setIsDarkMode(nextMode);
-      await AsyncStorage.setItem(THEME_KEY, nextMode ? 'dark' : 'light');
+      await SecureStore.setItemAsync(THEME_KEY, nextMode ? 'dark' : 'light');
     } catch (e) {
       console.log('Fehler beim Speichern des Themes');
     }
   };
 
-  // --- MASTER-PASSWORT LOGIK ---
+  // --- MASTER-PASSWORT LOGIK (SECURE STORE) ---
   const checkMasterPassword = async () => {
     try {
-      const master = await AsyncStorage.getItem(MASTER_KEY);
+      const master = await SecureStore.getItemAsync(MASTER_KEY);
       if (master) {
         setSavedMasterPw(master);
         setIsAuthenticated(false);
@@ -217,7 +214,7 @@ export default function App() {
     }
     try {
       const masterKey = newMasterInput.trim();
-      await AsyncStorage.setItem(MASTER_KEY, masterKey);
+      await SecureStore.setItemAsync(MASTER_KEY, masterKey);
       setSavedMasterPw(masterKey);
       setIsAuthenticated(true);
       setNewMasterInput('');
@@ -254,12 +251,11 @@ export default function App() {
     try {
       const newMaster = newMasterInput.trim();
       
-      // Neuverschlüsselung aller Einträge
       const reEncryptedPasswords = passwords.map((p) => ({
         ...p,
       }));
       
-      await AsyncStorage.setItem(MASTER_KEY, newMaster);
+      await SecureStore.setItemAsync(MASTER_KEY, newMaster);
       setSavedMasterPw(newMaster);
       await savePasswordsToStorage(reEncryptedPasswords, newMaster);
 
@@ -272,10 +268,10 @@ export default function App() {
     }
   };
 
-  // --- PASSWORT SPEICHERUNG & LADEN (MIT VERSCHLÜSSELUNG) ---
+  // --- PASSWORT SPEICHERUNG & LADEN (SECURE STORE) ---
   const loadPasswords = async (masterKey = savedMasterPw) => {
     try {
-      const jsonValue = await AsyncStorage.getItem(STORAGE_KEY);
+      const jsonValue = await SecureStore.getItemAsync(STORAGE_KEY);
       if (jsonValue != null) {
         const rawList = JSON.parse(jsonValue);
         const decryptedList = rawList.map((item) => ({
@@ -296,7 +292,7 @@ export default function App() {
         password: encryptData(item.password, masterKey),
       }));
       const jsonValue = JSON.stringify(encryptedList);
-      await AsyncStorage.setItem(STORAGE_KEY, jsonValue);
+      await SecureStore.setItemAsync(STORAGE_KEY, jsonValue);
     } catch (e) {
       Alert.alert('Fehler', 'Passwort konnte nicht gespeichert werden.');
     }
@@ -416,7 +412,7 @@ export default function App() {
             title: title.trim(),
             username: username.trim(),
             password: password.trim(),
-            createdAt: now, // Aktualisiert Erstell-/Erneuerungszeitpunkt
+            createdAt: now,
           };
         }
         return item;
@@ -427,7 +423,7 @@ export default function App() {
         title: title.trim(),
         username: username.trim(),
         password: password.trim(),
-        createdAt: now, // Speichert das Erstellungsdatum
+        createdAt: now,
       };
       updatedPasswords = [newEntry, ...passwords];
     }
@@ -461,7 +457,7 @@ export default function App() {
     );
   };
 
-  // --- ERWEITERTER PASSWORT-GENERATOR ---
+  // --- PASSWORT-GENERATOR ---
   const generatePassword = () => {
     let uppers = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     let lowers = 'abcdefghijklmnopqrstuvwxyz';
@@ -516,21 +512,18 @@ export default function App() {
 
   // --- GEFILTERTE LISTE BERECHNEN ---
   const getFilteredPasswords = () => {
-    // 1. Häufigkeiten ermitteln
     const counts = {};
     passwords.forEach((p) => {
       counts[p.password] = (counts[p.password] || 0) + 1;
     });
 
     return passwords.filter((item) => {
-      // Suchfilter
       const matchesSearch =
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.username && item.username.toLowerCase().includes(searchQuery.toLowerCase()));
 
       if (!matchesSearch) return false;
 
-      // Kriterienfilter
       if (filterType === 'weak') {
         return getPasswordStrength(item.password).score <= 2;
       }
@@ -542,7 +535,7 @@ export default function App() {
     });
   };
 
-  // --- FARBSCHEMA DYNAMISCH (LIGHT / DARK) ---
+  // --- FARBSCHEMA DYNAMISCH ---
   const colors = isDarkMode
     ? {
         bg: '#121212',
@@ -575,7 +568,7 @@ export default function App() {
         warningText: '#D97706',
       };
 
-  // --- MASTER-PASSWORT LOGIN / ERSTELLUNG SCREEN ---
+  // --- LOGIN / SETUP SCREEN ---
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -647,7 +640,6 @@ export default function App() {
           </TouchableOpacity>
         </View>
 
-        {/* ENTWICKLER INFO MODAL (Login Screen) */}
         <Modal visible={showDevInfo} animationType="fade" transparent={true}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
@@ -699,7 +691,6 @@ export default function App() {
         </View>
 
         <View style={styles.headerRight}>
-          {/* Health Check Button */}
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.inputBg }]}
             onPress={() => setShowHealthCheck(true)}
@@ -707,10 +698,9 @@ export default function App() {
             <Text style={{ fontSize: 15 }}>🩺</Text>
           </TouchableOpacity>
 
-          {/* Dark Mode Switch */}
           <View style={styles.themeToggleContainer}>
             <Text style={{ fontSize: 12, color: colors.subtext, marginRight: 2 }}>
-              {isDarkMode ? '🌙' : '☀️'}
+              {isDarkMode ? '🌙' : '☀️️'}
             </Text>
             <Switch
               value={isDarkMode}
@@ -720,7 +710,6 @@ export default function App() {
             />
           </View>
 
-          {/* Backup Button */}
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.inputBg }]}
             onPress={() => setShowBackupModal(true)}
@@ -728,7 +717,6 @@ export default function App() {
             <Text style={{ fontSize: 15 }}>💾</Text>
           </TouchableOpacity>
 
-          {/* Key Settings Button */}
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.inputBg }]}
             onPress={() => setShowMasterSettings(true)}
@@ -736,7 +724,6 @@ export default function App() {
             <Text style={{ fontSize: 15 }}>🔑</Text>
           </TouchableOpacity>
 
-          {/* Add Button */}
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: colors.primary }]}
             onPress={openAddModal}
@@ -819,7 +806,6 @@ export default function App() {
 
             return (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                {/* Header: Titel und Aktionen (Bearbeiten/Löschen) als kompakte Icon-Buttons */}
                 <View style={styles.cardHeader}>
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
@@ -848,7 +834,6 @@ export default function App() {
                   </View>
                 </View>
 
-                {/* WARNMELDUNG: PASSWORT ÄLTER ALS 1 JAHR */}
                 {isExpired && (
                   <TouchableOpacity 
                     style={[styles.expiredBanner, { backgroundColor: colors.warningBg }]}
@@ -860,7 +845,6 @@ export default function App() {
                   </TouchableOpacity>
                 )}
 
-                {/* Benutzername-Zeile mit Icon-Kopierbutton */}
                 {item.username ? (
                   <View style={styles.userRow}>
                     <Text style={[styles.cardUser, { color: colors.subtext }]} numberOfLines={1}>
@@ -875,7 +859,6 @@ export default function App() {
                   </View>
                 ) : null}
 
-                {/* Passwort-Zeile mit Icon-Buttons für Kopieren und Anzeigen/Verbergen */}
                 <View style={[styles.passwordRow, { backgroundColor: colors.inputBg }]}>
                   <Text style={[styles.cardPassword, { color: colors.accent }]} numberOfLines={1}>
                     {isVisible ? item.password : '••••••••••••'}
@@ -902,14 +885,14 @@ export default function App() {
         />
       )}
 
-      {/* FOOTER MIT ENTWICKLER-HINWEIS */}
+      {/* FOOTER */}
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         <Text style={[styles.footerText, { color: colors.subtext }]}>
           Entwickelt von <Text style={{ fontWeight: 'bold', color: colors.text }}>Özgür Cetin</Text> | ozgur.cetin@web.de
         </Text>
       </View>
 
-      {/* MODAL: PASSWORT-GESUNDHEITS-CHECK */}
+      {/* MODAL: GESUNDHEITS-CHECK */}
       <Modal visible={showHealthCheck} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
@@ -984,7 +967,6 @@ export default function App() {
               secureTextEntry={false}
             />
 
-            {/* GENERATOR OPTIONEN TOGGLE */}
             <TouchableOpacity
               style={{ marginBottom: 10 }}
               onPress={() => setShowGenSettings(!showGenSettings)}
@@ -1064,7 +1046,7 @@ export default function App() {
         </View>
       </Modal>
 
-      {/* MODAL: BACKUP (EXPORT / IMPORT) */}
+      {/* MODAL: BACKUP */}
       <Modal visible={showBackupModal} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
@@ -1072,7 +1054,6 @@ export default function App() {
               Backup & Wiederherstellung
             </Text>
 
-            {/* Export Bereich */}
             <TouchableOpacity
               style={[styles.fullButton, { backgroundColor: colors.primary, marginBottom: 16 }]}
               onPress={handleExportBackup}
@@ -1353,7 +1334,7 @@ const styles = StyleSheet.create({
   },
   passwordRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justify.Content: 'space-between',
     alignItems: 'center',
     padding: 8,
     paddingLeft: 12,
