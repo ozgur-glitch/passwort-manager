@@ -1,243 +1,72 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
   View,
-  TextInput,
   TouchableOpacity,
   FlatList,
+  TextInput,
+  Modal,
   SafeAreaView,
   StatusBar,
-  Switch,
-  Modal,
   ScrollView,
+  Switch,
   Alert
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Clipboard from 'expo-clipboard';
-
-const STORAGE_KEY_ITEMS = '@password_manager_items';
-const STORAGE_KEY_THEME = '@password_manager_theme';
-const STORAGE_KEY_MASTER = '@password_manager_master_pin';
 
 export default function App() {
-  // Theme State
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [passwords, setPasswords] = useState([
+    { id: '1', title: 'E-Mail Account', username: 'max.mustermann@example.com', password: 'Password123!', category: 'Privat' },
+    { id: '2', title: 'GitHub', username: 'dev-user', password: 'SecureGitPass99!', category: 'Arbeit' }
+  ]);
 
-  // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [hasMasterPin, setHasMasterPin] = useState(false);
-  const [inputMasterPin, setInputMasterPin] = useState('');
-  const [storedMasterPin, setStoredMasterPin] = useState('');
+  // Modal States
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [showPasswordId, setShowPasswordId] = useState(null);
 
-  // App Data State
-  const [passwords, setPasswords] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Modals
-  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
-  const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
-  const [isGuideModalVisible, setIsGuideModalVisible] = useState(false);
-
-  // Form State
+  // Form States
   const [title, setTitle] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [notes, setNotes] = useState('');
-  const [showPasswordMap, setShowPasswordMap] = useState({});
+  const [category, setCategory] = useState('Privat');
 
-  // Generator Options
-  const [genLength, setGenLength] = useState(16);
+  const theme = isDarkMode ? darkTheme : lightTheme;
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  const loadInitialData = async () => {
-    try {
-      // Darkmode laden
-      const savedTheme = await AsyncStorage.getItem(STORAGE_KEY_THEME);
-      if (savedTheme !== null) {
-        setIsDarkMode(savedTheme === 'dark');
-      }
-
-      // Master PIN laden
-      const savedPin = await AsyncStorage.getItem(STORAGE_KEY_MASTER);
-      if (savedPin) {
-        setStoredMasterPin(savedPin);
-        setHasMasterPin(true);
-      } else {
-        setHasMasterPin(false);
-      }
-
-      // Passwörter laden
-      const savedData = await AsyncStorage.getItem(STORAGE_KEY_ITEMS);
-      if (savedData !== null) {
-        setPasswords(JSON.parse(savedData));
-      }
-    } catch (e) {
-      console.error('Fehler beim Laden der Daten:', e);
-    }
-  };
-
-  const savePasswordsToStorage = async (data) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(data));
-    } catch (e) {
-      console.error('Fehler beim Speichern:', e);
-    }
-  };
-
-  const toggleTheme = async (value) => {
-    setIsDarkMode(value);
-    await AsyncStorage.setItem(STORAGE_KEY_THEME, value ? 'dark' : 'light');
-  };
-
-  // Auth Handler
-  const handleAuthSubmit = async () => {
-    if (!hasMasterPin) {
-      if (inputMasterPin.length < 4) {
-        Alert.alert('Hinweis', 'Die Master-PIN muss mindestens 4-stellig sein.');
-        return;
-      }
-      await AsyncStorage.setItem(STORAGE_KEY_MASTER, inputMasterPin);
-      setStoredMasterPin(inputMasterPin);
-      setHasMasterPin(true);
-      setIsAuthenticated(true);
-      setInputMasterPin('');
-    } else {
-      if (inputMasterPin === storedMasterPin) {
-        setIsAuthenticated(true);
-        setInputMasterPin('');
-      } else {
-        Alert.alert('Fehler', 'Falsche Master-PIN!');
-      }
-    }
-  };
-
-  // Passwort-Generator
-  const generatePassword = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
-    let result = '';
-    for (let i = 0; i < genLength; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setPassword(result);
-  };
-
-  // Passwort hinzufügen
   const handleAddPassword = () => {
     if (!title || !password) {
       Alert.alert('Fehler', 'Bitte gib mindestens einen Titel und ein Passwort ein.');
       return;
     }
-
-    const newItem = {
+    const newEntry = {
       id: Date.now().toString(),
       title,
       username,
       password,
-      notes,
-      createdAt: new Date().toLocaleDateString('de-DE'),
+      category: category || 'General'
     };
-
-    const updated = [newItem, ...passwords];
-    setPasswords(updated);
-    savePasswordsToStorage(updated);
-
-    // Formular zurücksetzen
+    setPasswords([newEntry, ...passwords]);
     setTitle('');
     setUsername('');
     setPassword('');
-    setNotes('');
-    setIsAddModalVisible(false);
+    setCategory('Privat');
+    setIsAddModalOpen(false);
   };
 
-  // Passwort löschen
-  const handleDelete = (id) => {
-    Alert.alert('Löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      {
-        text: 'Löschen',
-        style: 'destructive',
-        onPress: () => {
-          const updated = passwords.filter((item) => item.id !== id);
-          setPasswords(updated);
-          savePasswordsToStorage(updated);
-        },
-      },
-    ]);
+  const handleDeletePassword = (id) => {
+    setPasswords(passwords.filter(item => item.id !== id));
   };
 
-  // Zwischenablage
-  const copyToClipboard = async (text, label) => {
-    await Clipboard.setStringAsync(text);
-    Alert.alert('Kopiert', `${label} wurde in die Zwischenablage kopiert.`);
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
+    let result = '';
+    for (let i = 0; i < 14; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPassword(result);
   };
-
-  // Anzeigestatus für Passwort umschalten
-  const toggleShowPassword = (id) => {
-    setShowPasswordMap((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  // Filterung
-  const filteredPasswords = passwords.filter(
-    (item) =>
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Dynamic Theme Colors
-  const theme = {
-    bg: isDarkMode ? '#0F172A' : '#F8FAFC',
-    card: isDarkMode ? '#1E293B' : '#FFFFFF',
-    text: isDarkMode ? '#F8FAFC' : '#0F172A',
-    subText: isDarkMode ? '#94A3B8' : '#64748B',
-    border: isDarkMode ? '#334155' : '#E2E8F0',
-    primary: '#3B82F6',
-    danger: '#EF4444',
-    success: '#10B981',
-  };
-
-  // Login Screen
-  if (!isAuthenticated) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-        <View style={styles.authContainer}>
-          <Text style={styles.lockIcon}>🔒</Text>
-          <Text style={[styles.title, { color: theme.text }]}>
-            {hasMasterPin ? 'Passwort Manager' : 'Master-PIN erstellen'}
-          </Text>
-          <Text style={[styles.subtitle, { color: theme.subText }]}>
-            {hasMasterPin
-              ? 'Gib deine PIN ein, um auf deine Daten zuzugreifen.'
-              : 'Erstelle eine PIN zur Sicherung deiner Passwörter.'}
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: theme.card, color: theme.text, borderColor: theme.border },
-            ]}
-            placeholder="Master-PIN"
-            placeholderTextColor={theme.subText}
-            secureTextEntry
-            keyboardType="numeric"
-            value={inputMasterPin}
-            onChangeText={setInputMasterPin}
-          />
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: theme.primary }]}
-            onPress={handleAuthSubmit}
-          >
-            <Text style={styles.buttonText}>
-              {hasMasterPin ? 'Entsperren' : 'PIN Speichern & Starten'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -245,236 +74,191 @@ export default function App() {
 
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>🔐 SafeKeeper</Text>
-        <TouchableOpacity onPress={() => setIsSettingsModalVisible(true)} style={styles.iconBtn}>
-          <Text style={{ fontSize: 22 }}>⚙️</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>🔐 KeyVault</Text>
+        <TouchableOpacity onPress={() => setIsSettingsOpen(true)} style={styles.iconButton}>
+          <Text style={{ fontSize: 24 }}>⚙️</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Suchleiste */}
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={[
-            styles.searchInput,
-            { backgroundColor: theme.card, color: theme.text, borderColor: theme.border },
-          ]}
-          placeholder="Suchen nach Titel oder Benutzername..."
-          placeholderTextColor={theme.subText}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Liste */}
+      {/* Main List */}
       <FlatList
-        data={filteredPasswords}
+        data={passwords}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80 }}
-        ListEmptyComponent={
-          <View style={styles.emptyView}>
-            <Text style={[styles.emptyText, { color: theme.subText }]}>
-              {searchQuery ? 'Keine Passwörter gefunden.' : 'Noch keine Passwörter gespeichert.'}
-            </Text>
-          </View>
-        }
-        renderItem={({ item }) => {
-          const isVisible = !!showPasswordMap[item.id];
-          return (
-            <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <View style={styles.cardHeader}>
+        contentContainerStyle={{ padding: 16 }}
+        renderItem={({ item }) => (
+          <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+            <View style={styles.cardHeader}>
+              <View>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>{item.title}</Text>
-                <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                  <Text style={{ fontSize: 18 }}>🗑️</Text>
-                </TouchableOpacity>
-              </View>
-
-              {item.username ? (
-                <TouchableOpacity
-                  style={styles.fieldRow}
-                  onPress={() => copyToClipboard(item.username, 'Benutzername')}
-                >
-                  <Text style={[styles.fieldLabel, { color: theme.subText }]}>Benutzer:</Text>
-                  <Text style={[styles.fieldValue, { color: theme.text }]}>{item.username}</Text>
-                  <Text style={styles.copyBadge}>📋 Kopieren</Text>
-                </TouchableOpacity>
-              ) : null}
-
-              <TouchableOpacity
-                style={styles.fieldRow}
-                onPress={() => copyToClipboard(item.password, 'Passwort')}
-              >
-                <Text style={[styles.fieldLabel, { color: theme.subText }]}>Passwort:</Text>
-                <Text style={[styles.fieldValue, { color: theme.text, fontFamily: 'monospace' }]}>
-                  {isVisible ? item.password : '••••••••••••'}
+                <Text style={[styles.cardTag, { backgroundColor: theme.tagBg, color: theme.primary }]}>
+                  {item.category}
                 </Text>
-                <TouchableOpacity onPress={() => toggleShowPassword(item.id)} style={{ paddingHorizontal: 6 }}>
-                  <Text>{isVisible ? '🙈' : '👁️'}</Text>
-                </TouchableOpacity>
-                <Text style={styles.copyBadge}>📋 Kopieren</Text>
+              </View>
+              <TouchableOpacity onPress={() => handleDeletePassword(item.id)}>
+                <Text style={{ fontSize: 18 }}>🗑️</Text>
               </TouchableOpacity>
-
-              {item.notes ? (
-                <Text style={[styles.notes, { color: theme.subText }]}>Notiz: {item.notes}</Text>
-              ) : null}
             </View>
-          );
-        }}
+
+            {item.username ? (
+              <Text style={[styles.cardText, { color: theme.subtext }]}>
+                Benutzer: {item.username}
+              </Text>
+            ) : null}
+
+            <View style={styles.passwordRow}>
+              <Text style={[styles.cardText, { color: theme.text, fontWeight: 'bold' }]}>
+                Passwort: {showPasswordId === item.id ? item.password : '••••••••••••'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowPasswordId(showPasswordId === item.id ? null : item.id)}>
+                <Text style={{ color: theme.primary, fontSize: 14 }}>
+                  {showPasswordId === item.id ? ' Verbergen' : ' Anzeigen'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        ListEmptyComponent={
+          <Text style={[styles.emptyText, { color: theme.subtext }]}>
+            Keine Passwörter gespeichert. Tippe auf "+", um eines hinzuzufügen.
+          </Text>
+        }
       />
 
       {/* Floating Action Button */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: theme.primary }]}
-        onPress={() => setIsAddModalVisible(true)}
+        onPress={() => setIsAddModalOpen(true)}
       >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
-      {/* MODAL: Passwort hinzufügen */}
-      <Modal visible={isAddModalVisible} animationType="slide" transparent={false}>
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-          <ScrollView contentContainerStyle={{ padding: 20 }}>
+      {/* Add Password Modal */}
+      <Modal visible={isAddModalOpen} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.cardBg }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>Neuer Eintrag</Text>
 
-            <Text style={[styles.label, { color: theme.text }]}>Titel / Dienst *</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-              placeholder="z.B. Google, Netflix"
-              placeholderTextColor={theme.subText}
+              placeholder="Titel (z. B. Netflix)"
+              placeholderTextColor={theme.subtext}
+              style={[styles.input, { color: theme.text, borderColor: theme.border }]}
               value={title}
               onChangeText={setTitle}
             />
 
-            <Text style={[styles.label, { color: theme.text }]}>Benutzername / E-Mail</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-              placeholder="max@mustermann.de"
-              placeholderTextColor={theme.subText}
+              placeholder="Benutzername / E-Mail"
+              placeholderTextColor={theme.subtext}
+              style={[styles.input, { color: theme.text, borderColor: theme.border }]}
               value={username}
               onChangeText={setUsername}
             />
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={[styles.label, { color: theme.text }]}>Passwort *</Text>
-              <TouchableOpacity onPress={generatePassword}>
-                <Text style={{ color: theme.primary, fontWeight: 'bold' }}>⚡ Zufallspasswort</Text>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <TextInput
+                placeholder="Passwort"
+                placeholderTextColor={theme.subtext}
+                style={[styles.input, { color: theme.text, borderColor: theme.border, flex: 1 }]}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity
+                style={[styles.btnGen, { backgroundColor: theme.primary }]}
+                onPress={generateRandomPassword}
+              >
+                <Text style={{ color: '#fff', fontSize: 12 }}>Generieren</Text>
               </TouchableOpacity>
             </View>
+
             <TextInput
-              style={[styles.input, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-              placeholder="Sicheres Passwort"
-              placeholderTextColor={theme.subText}
-              value={password}
-              onChangeText={setPassword}
+              placeholder="Kategorie (z. B. Arbeit, Privat)"
+              placeholderTextColor={theme.subtext}
+              style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+              value={category}
+              onChangeText={setCategory}
             />
 
-            <Text style={[styles.label, { color: theme.text }]}>Notizen (optional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
-              placeholder="Zusätzliche Infos..."
-              placeholderTextColor={theme.subText}
-              multiline
-              numberOfLines={3}
-              value={notes}
-              onChangeText={setNotes}
-            />
-
-            <View style={styles.modalBtnRow}>
+            <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.button, styles.btnHalf, { backgroundColor: theme.danger }]}
-                onPress={() => setIsAddModalVisible(false)}
+                style={[styles.btn, { backgroundColor: '#888' }]}
+                onPress={() => setIsAddModalOpen(false)}
               >
-                <Text style={styles.buttonText}>Abbrechen</Text>
+                <Text style={styles.btnText}>Abbrechen</Text>
               </TouchableOpacity>
+
               <TouchableOpacity
-                style={[styles.button, styles.btnHalf, { backgroundColor: theme.primary }]}
+                style={[styles.btn, { backgroundColor: theme.primary }]}
                 onPress={handleAddPassword}
               >
-                <Text style={styles.buttonText}>Speichern</Text>
+                <Text style={styles.btnText}>Speichern</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Settings Modal */}
+      <Modal visible={isSettingsOpen} animationType="slide">
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+          <View style={[styles.header, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Einstellungen</Text>
+            <TouchableOpacity onPress={() => setIsSettingsOpen(false)} style={styles.iconButton}>
+              <Text style={{ fontSize: 20, color: theme.primary }}>Fertig</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={{ padding: 16 }}>
+            {/* Theme Toggle */}
+            <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.settingText, { color: theme.text }]}>Dunkelmodus</Text>
+              <Switch value={isDarkMode} onValueChange={setIsDarkMode} />
+            </View>
+
+            {/* Guide Button */}
+            <TouchableOpacity
+              style={[styles.settingRow, { borderBottomColor: theme.border }]}
+              onPress={() => setIsGuideOpen(true)}
+            >
+              <Text style={[styles.settingText, { color: theme.text }]}>📖 Benutzerhandbuch</Text>
+              <Text style={{ color: theme.subtext }}>›</Text>
+            </TouchableOpacity>
+
+            {/* Developer Info */}
+            <View style={styles.devSection}>
+              <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 1.0.0 (Expo SDK 51)</Text>
+            </View>
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
-      {/* MODAL: Einstellungen */}
-      <Modal visible={isSettingsModalVisible} animationType="slide" transparent={false}>
+      {/* Manual / Guide Modal */}
+      <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-          <ScrollView contentContainerStyle={{ padding: 20 }}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Einstellungen ⚙️</Text>
-
-            {/* Dark Mode Switch */}
-            <View style={[styles.settingRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Text style={[styles.settingText, { color: theme.text }]}>Dunkelmodus (Dark Mode)</Text>
-              <Switch value={isDarkMode} onValueChange={toggleTheme} />
-            </View>
-
-            {/* Handbuch Link */}
-            <TouchableOpacity
-              style={[styles.settingRow, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => setIsGuideModalVisible(true)}
-            >
-              <Text style={[styles.settingText, { color: theme.text }]}>📖 Benutzerhandbuch lesen</Text>
-              <Text style={{ color: theme.subText }}>➔</Text>
+          <View style={[styles.header, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Benutzerhandbuch</Text>
+            <TouchableOpacity onPress={() => setIsGuideOpen(false)} style={styles.iconButton}>
+              <Text style={{ fontSize: 20, color: theme.primary }}>Schließen</Text>
             </TouchableOpacity>
+          </View>
 
-            {/* Sperren */}
-            <TouchableOpacity
-              style={[styles.settingRow, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => setIsAuthenticated(false)}
-            >
-              <Text style={[styles.settingText, { color: theme.danger }]}>🔒 App jetzt sperren</Text>
-            </TouchableOpacity>
-
-            {/* Entwickler-Informationen */}
-            <View style={[styles.infoBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Text style={[styles.infoTitle, { color: theme.text }]}>Entwickler-Informationen</Text>
-              <Text style={[styles.infoText, { color: theme.subText }]}>Entwickler: Özgür Cetin</Text>
-              <Text style={[styles.infoText, { color: theme.subText }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.infoText, { color: theme.subText }]}>Version: 1.0.0 (Expo SDK 51)</Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.primary, marginTop: 20 }]}
-              onPress={() => setIsSettingsModalVisible(false)}
-            >
-              <Text style={styles.buttonText}>Schließen</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* MODAL: Benutzerhandbuch */}
-      <Modal visible={isGuideModalVisible} animationType="fade" transparent={false}>
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-          <ScrollView contentContainerStyle={{ padding: 20 }}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>📖 Benutzerhandbuch</Text>
-
-            <Text style={[styles.guideSectionHeader, { color: theme.primary }]}>1. Master-PIN</Text>
-            <Text style={[styles.guideText, { color: theme.text }]}>
-              Beim ersten Start legen Sie eine Master-PIN fest. Diese schützt all Ihre hinterlegten Zugangsdaten lokal auf diesem Gerät.
+          <ScrollView style={{ padding: 16 }}>
+            <Text style={[styles.guideHeading, { color: theme.text }]}>1. Passwörter hinzufügen</Text>
+            <Text style={[styles.guideText, { color: theme.subtext }]}>
+              Tippe unten rechts auf das Plus-Icon (+), um ein neues Passwort einzutragen. Du kannst auch den Button "Generieren" nutzen, um ein sicheres Passwort zu erstellen.
             </Text>
 
-            <Text style={[styles.guideSectionHeader, { color: theme.primary }]}>2. Passwörter verwalten</Text>
-            <Text style={[styles.guideText, { color: theme.text }]}>
-              Klicken Sie auf den blauen "+"-Button unten rechts, um neue Zugangsdaten hinzuzufügen. Über das Augensymbol (👁️) können Sie Passwörter anzeigen lassen.
+            <Text style={[styles.guideHeading, { color: theme.text }]}>2. Passwörter anzeigen & löschen</Text>
+            <Text style={[styles.guideText, { color: theme.subtext }]}>
+              Klicke auf "Anzeigen" neben einem Passwort-Eintrag, um das Passwort im Klartext zu sehen. Das Mülleimer-Symbol löscht den jeweiligen Eintrag permanent.
             </Text>
 
-            <Text style={[styles.guideSectionHeader, { color: theme.primary }]}>3. Passwörter generieren</Text>
-            <Text style={[styles.guideText, { color: theme.text }]}>
-              Im Formular für neue Einträge können Sie über "⚡ Zufallspasswort" automatisch ein hochsicheres Passwort generieren lassen.
+            <Text style={[styles.guideHeading, { color: theme.text }]}>3. Design anpassen</Text>
+            <Text style={[styles.guideText, { color: theme.subtext }]}>
+              Über das Zahnrad-Icon oben rechts kannst du zwischen Hell- und Dunkelmodus wechseln.
             </Text>
-
-            <Text style={[styles.guideSectionHeader, { color: theme.primary }]}>4. Zwischenablage & Löschen</Text>
-            <Text style={[styles.guideText, { color: theme.text }]}>
-              Tippen Sie auf ein Feld, um Werte direkt in die Zwischenablage zu kopieren. Mit dem Mülleimer-Symbol können Sie Einträge unwiderruflich löschen.
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.primary, marginTop: 30 }]}
-              onPress={() => setIsGuideModalVisible(false)}
-            >
-              <Text style={styles.buttonText}>Zurück zu den Einstellungen</Text>
-            </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -482,197 +266,177 @@ export default function App() {
   );
 }
 
+// Themes
+const lightTheme = {
+  bg: '#F4F6F9',
+  cardBg: '#FFFFFF',
+  text: '#1F2937',
+  subtext: '#6B7280',
+  border: '#E5E7EB',
+  primary: '#2563EB',
+  tagBg: '#EFF6FF'
+};
+
+const darkTheme = {
+  bg: '#0F172A',
+  cardBg: '#1E293B',
+  text: '#F8FAFC',
+  subtext: '#94A3B8',
+  border: '#334155',
+  primary: '#3B82F6',
+  tagBg: '#1E3A8A'
+};
+
+// Stylesheet
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  authContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  lockIcon: {
-    fontSize: 60,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 24,
+    flex: 1
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
+    paddingVertical: 12,
+    borderBottomWidth: 1
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: 'bold'
   },
-  iconBtn: {
-    padding: 4,
-  },
-  searchContainer: {
-    padding: 16,
-  },
-  searchInput: {
-    height: 46,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 14,
+  iconButton: {
+    padding: 4
   },
   card: {
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: 12
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
+    alignItems: 'flex-start'
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: 'bold'
   },
-  fieldRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 4,
-  },
-  fieldLabel: {
-    width: 80,
-    fontSize: 13,
-  },
-  fieldValue: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  copyBadge: {
+  cardTag: {
     fontSize: 11,
-    color: '#3B82F6',
-    marginLeft: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 4
   },
-  notes: {
+  cardText: {
     marginTop: 8,
-    fontSize: 12,
-    fontStyle: 'italic',
+    fontSize: 14
   },
-  emptyView: {
+  passwordRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 8
   },
   emptyText: {
-    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 40,
+    fontSize: 14
   },
   fab: {
     position: 'absolute',
     right: 20,
-    bottom: 25,
+    bottom: 20,
     width: 56,
     height: 56,
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
+    elevation: 4
   },
   fabText: {
-    color: '#FFFFFF',
+    color: '#FFF',
     fontSize: 28,
-    marginTop: -2,
+    lineHeight: 30
   },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    marginBottom: 14,
-    fontSize: 15,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20
   },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-    paddingTop: 10,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 6,
+  modalContent: {
+    borderRadius: 16,
+    padding: 20
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: 16
   },
-  modalBtnRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  button: {
-    height: 48,
+  input: {
+    borderWidth: 1,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 12,
+    marginBottom: 12,
+    fontSize: 14
   },
-  btnHalf: {
-    width: '48%',
+  btnGen: {
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginBottom: 12
   },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 12
+  },
+  btn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8
+  },
+  btnText: {
+    color: '#FFF',
+    fontWeight: 'bold'
   },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 12,
+    paddingVertical: 16,
+    borderBottomWidth: 1
   },
   settingText: {
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 16
   },
-  infoBox: {
+  devSection: {
+    marginTop: 32,
     padding: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.03)'
   },
-  infoTitle: {
+  devTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 8
   },
-  infoText: {
-    fontSize: 13,
-    marginBottom: 4,
+  devText: {
+    fontSize: 14,
+    marginBottom: 4
   },
-  guideSectionHeader: {
+  guideHeading: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginTop: 14,
-    marginBottom: 6,
+    marginTop: 16,
+    marginBottom: 4
   },
   guideText: {
     fontSize: 14,
-    lineHeight: 20,
-  },
+    lineHeight: 20
+  }
 });
