@@ -1,33 +1,34 @@
 {
   "expo": {
-    "name": "passwort-manager",
+    "name": "Password Manager",
     "slug": "passwort-manager",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#121212"
+      "backgroundColor": "#0F172A"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ceozsteam.passwortmanager"
     },
     "android": {
-      "package": "com.oc2003.passwortmanager",
       "adaptiveIcon": {
         "foregroundImage": "./icon.png",
-        "backgroundColor": "#121212"
-      }
+        "backgroundColor": "#0F172A"
+      },
+      "package": "com.ceozsteam.passwortmanager"
     },
-    "owner": "oc2003",
+    "web": {
+      "favicon": "./favicon.png"
+    },
+    "owner": "ceozs-team",
     "extra": {
       "eas": {
-        "projectId": "528236ac-3589-41b4-8154-5e000ca69c1c"
+        "projectId": "67695cfd-4d30-4d09-9a4b-1eaaa19f0403"
       }
     }
   }
