@@ -9,7 +9,7 @@
     "splash": {
       "image": "./splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
+      "backgroundColor": "#121824"
     },
     "ios": {
       "supportsTablet": true,
@@ -18,18 +18,18 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./icon.png",
-        "backgroundColor": "#0F172A"
+        "backgroundColor": "#121824"
       },
       "package": "com.ceozsteam.passwortmanager"
     },
     "web": {
       "favicon": "./favicon.png"
     },
-    "owner": "ceozs-team",
     "extra": {
       "eas": {
         "projectId": "67695cfd-4d30-4d09-9a4b-1eaaa19f0403"
       }
-    }
+    },
+    "owner": "ceozs-team"
   }
 }
