@@ -137,7 +137,7 @@ export default function App() {
     resetInactivityTimer();
     try {
       const backupData = JSON.stringify({ passwords, autoLockMinutes, isDarkMode }, null, 2);
-      const timestamp = new Date().toISOString().replace[:/]/g, '-').slice(0, 19);
+      const timestamp = new Date().toISOString().replace(/[:/]/g, '-').slice(0, 19);
       const fileName = `password_manager_backup_${timestamp}.json`;
 
       if (Platform.OS === 'android') {
@@ -726,7 +726,7 @@ export default function App() {
               />
             </View>
 
-            {/* NEU: Backup & Wiederherstellung */}
+            {/* Backup & Wiederherstellung */}
             <Text style={[styles.sectionHeader, { color: theme.primary }]}>💾 Backup & Wiederherstellung</Text>
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, marginBottom: 16 }}>
               <TouchableOpacity
@@ -864,7 +864,7 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
-      {/* Manual / Guide Modal (Angepasst mit Backup & Wiederherstellung) */}
+      {/* Manual / Guide Modal (Angepasst) */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -879,17 +879,17 @@ export default function App() {
           <ScrollView style={{ padding: 16 }}>
             <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Sicherheit & Biometrische Anmeldung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Beim Start der App und beim Aufdecken von Passwörtern schützt dich die biometrische Authentifizierung.
+              Beim Start der App und beim Aufdecken von Passwörtern schützt dich die biometrische Authentifizierung (Face ID / Fingerabdruck), damit sensible Daten sicher bleiben.
             </Text>
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Auto-Lock Timer</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Die App sperrt sich nach Ablauf der eingestellten Minuten bei Inaktivität automatisch.
+              Die App sperrt sich nach Ablauf des in den Einstellungen festgelegten Zeitraums bei Inaktivität automatisch.
             </Text>
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Backup & Wiederherstellung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Du kannst in den Einstellungen jederzeit ein JSON-Backup deiner Tresor-Einträge exportieren und bei Bedarf importieren, um deine Daten auf ein neues Gerät zu übertragen.
+              Du kannst in den Einstellungen jederzeit ein JSON-Backup deiner Tresor-Einträge exportieren und bei Bedarf importieren, um deine Daten zu sichern oder auf ein anderes Gerät zu übertragen.
             </Text>
           </ScrollView>
         </SafeAreaView>
