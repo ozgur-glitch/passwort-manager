@@ -13,9 +13,12 @@ import {
   Switch,
   Alert,
   Linking,
-  Clipboard
+  Clipboard,
+  Platform
 } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as FileSystem from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
 
 export default function App() {
   const [isLocked, setIsLocked] = useState(true);
@@ -86,7 +89,7 @@ export default function App() {
   }, []);
 
   // Biometrischer Schutz beim Aufdecken eines Passworts
-  const handleRevealPassword = async (itemId, currentPwd) => {
+  const handleRevealPassword = async (itemId) => {
     if (showPasswordId === itemId) {
       setShowPasswordId(null);
       return;
@@ -129,9 +132,77 @@ export default function App() {
     };
   }, [isLocked, autoLockMinutes]);
 
+  // JSON Backup Export
+  const handleExportBackup = async () => {
+    resetInactivityTimer();
+    try {
+      const backupData = JSON.stringify({ passwords, autoLockMinutes, isDarkMode }, null, 2);
+      const timestamp = new Date().toISOString().replace[:/]/g, '-').slice(0, 19);
+      const fileName = `password_manager_backup_${timestamp}.json`;
+
+      if (Platform.OS === 'android') {
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (permissions.granted) {
+          const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+            permissions.directoryUri,
+            fileName,
+            'application/json'
+          );
+          await FileSystem.writeAsStringAsync(uri, backupData, { encoding: FileSystem.EncodingType.UTF8 });
+          Alert.alert('Erfolg', 'Backup erfolgreich gespeichert.');
+        }
+      } else {
+        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        await FileSystem.writeAsStringAsync(fileUri, backupData, { encoding: FileSystem.EncodingType.UTF8 });
+        Alert.alert('Erfolg', `Backup erstellt unter:\n${fileUri}`);
+      }
+    } catch (error) {
+      Alert.alert('Fehler', 'Backup konnte nicht erstellt werden: ' + error.message);
+    }
+  };
+
+  // JSON Backup Import
+  const handleImportBackup = async () => {
+    resetInactivityTimer();
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', '*/*'],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const fileUri = result.assets[0].uri;
+        const fileContent = await FileSystem.readAsStringAsync(fileUri);
+        const parsedData = JSON.parse(fileContent);
+
+        if (parsedData && Array.isArray(parsedData.passwords)) {
+          Alert.alert(
+            'Backup wiederherstellen',
+            'Möchtest du die Passwörter aus der Backup-Datei laden? Aktuelle Einträge werden überschrieben.',
+            [
+              { text: 'Abbrechen', style: 'cancel' },
+              {
+                text: 'Wiederherstellen',
+                onPress: () => {
+                  setPasswords(parsedData.passwords);
+                  if (parsedData.autoLockMinutes) setAutoLockMinutes(parsedData.autoLockMinutes);
+                  if (typeof parsedData.isDarkMode === 'boolean') setIsDarkMode(parsedData.isDarkMode);
+                  Alert.alert('Erfolg', 'Daten wurden erfolgreich wiederhergestellt!');
+                }
+              }
+            ]
+          );
+        } else {
+          Alert.alert('Fehler', 'Ungültiges Backup-Format.');
+        }
+      }
+    } catch (error) {
+      Alert.alert('Fehler', 'Import fehlgeschlagen: ' + error.message);
+    }
+  };
+
   const isPasswordWeak = (pwd) => pwd.length < 8;
 
-  // Passwort-Stärke-Berechnung (Prozent & Label)
   const calculatePasswordStrength = (pwd) => {
     if (!pwd) return { score: 0, label: 'Leer', color: '#CBD5E1' };
     let score = 0;
@@ -303,15 +374,9 @@ export default function App() {
 
     if (!matchesSearch) return false;
 
-    if (activeAuditFilter === 'WEAK') {
-      return isPasswordWeak(item.password);
-    }
-    if (activeAuditFilter === 'DUPLICATES') {
-      return duplicateList.includes(item.password);
-    }
-    if (activeAuditFilter === 'OLD') {
-      return isPasswordOlderThanOneYear(item.lastChanged);
-    }
+    if (activeAuditFilter === 'WEAK') return isPasswordWeak(item.password);
+    if (activeAuditFilter === 'DUPLICATES') return duplicateList.includes(item.password);
+    if (activeAuditFilter === 'OLD') return isPasswordOlderThanOneYear(item.lastChanged);
 
     return true;
   });
@@ -331,7 +396,6 @@ export default function App() {
 
   const strengthInfo = calculatePasswordStrength(password);
 
-  // Wenn gesperrt (durch Biometrie oder Auto-Lock) - Layout korrigiert für saubere Darstellung
   if (isLocked) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
@@ -425,7 +489,6 @@ export default function App() {
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 8 }}>
                     <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
                     
-                    {/* Warnungen untereinander */}
                     <View style={styles.warningColumn}>
                       <View style={[styles.warningBadge, styles.badgeWeak, { opacity: weak ? 1 : 0 }]}>
                         <Text style={[styles.warningBadgeText, styles.badgeTextWeak]}>Schwach</Text>
@@ -450,7 +513,6 @@ export default function App() {
                   </View>
                 </View>
 
-                {/* Aufklappbarer Inhalt */}
                 {isExpanded && (
                   <View style={{ marginTop: 6 }}>
                     {item.username ? (
@@ -502,7 +564,7 @@ export default function App() {
                       <View style={{ flexDirection: 'row', gap: 6 }}>
                         <TouchableOpacity 
                           style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} 
-                          onPress={() => handleRevealPassword(item.id, item.password)}
+                          onPress={() => handleRevealPassword(item.id)}
                         >
                           <Text style={[styles.miniBtnText, { color: theme.primary }]}>
                             {showPasswordId === item.id ? 'Verbergen' : 'Anzeigen'}
@@ -594,7 +656,6 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* Live Passwort-Stärke-Anzeige */}
             <View style={styles.strengthContainer}>
               <View style={styles.strengthHeaderRow}>
                 <Text style={[styles.strengthLabelTitle, { color: theme.subtext }]}>Sicherheit:</Text>
@@ -665,10 +726,26 @@ export default function App() {
               />
             </View>
 
+            {/* NEU: Backup & Wiederherstellung */}
+            <Text style={[styles.sectionHeader, { color: theme.primary }]}>💾 Backup & Wiederherstellung</Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, marginBottom: 16 }}>
+              <TouchableOpacity
+                style={[styles.backupBtn, { backgroundColor: theme.primary, flex: 1 }]}
+                onPress={handleExportBackup}
+              >
+                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Backup exportieren</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.backupBtn, { backgroundColor: theme.cardBg, borderColor: theme.border, borderWidth: 1, flex: 1 }]}
+                onPress={handleImportBackup}
+              >
+                <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 14 }}>Backup importieren</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Sicherheits-Check */}
             <Text style={[styles.sectionHeader, { color: theme.primary }]}>🛡️ Passwort-Sicherheits-Check</Text>
             <View style={[styles.auditContainer, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-              
               <View style={styles.auditItem}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.auditTitle, { color: theme.text }]}>Gesamteinträge</Text>
@@ -697,11 +774,7 @@ export default function App() {
                       {weakCount} {weakCount > 0 ? '⚠️' : '✅'}
                     </Text>
                   </View>
-                  {weakCount > 0 ? (
-                    <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text>
-                  ) : (
-                    <View style={styles.arrowPlaceholder} />
-                  )}
+                  {weakCount > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
                 </View>
               </TouchableOpacity>
 
@@ -720,11 +793,7 @@ export default function App() {
                       {duplicateList.length} {duplicateList.length > 0 ? '⚠️' : '✅'}
                     </Text>
                   </View>
-                  {duplicateList.length > 0 ? (
-                    <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text>
-                  ) : (
-                    <View style={styles.arrowPlaceholder} />
-                  )}
+                  {duplicateList.length > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
                 </View>
               </TouchableOpacity>
 
@@ -743,14 +812,9 @@ export default function App() {
                       {oldPasswordCount} {oldPasswordCount > 0 ? '⚠️' : '✅'}
                     </Text>
                   </View>
-                  {oldPasswordCount > 0 ? (
-                    <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text>
-                  ) : (
-                    <View style={styles.arrowPlaceholder} />
-                  )}
+                  {oldPasswordCount > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
                 </View>
               </TouchableOpacity>
-
             </View>
 
             {/* Generator Settings Header */}
@@ -782,7 +846,6 @@ export default function App() {
               <Switch value={useUppercase} onValueChange={setUseUppercase} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
             </View>
 
-            {/* Guide Button */}
             <TouchableOpacity
               style={[styles.settingRow, { borderBottomColor: theme.border, marginTop: 12 }]}
               onPress={() => setIsGuideOpen(true)}
@@ -791,18 +854,17 @@ export default function App() {
               <Text style={{ color: theme.subtext }}>›</Text>
             </TouchableOpacity>
 
-            {/* Developer Info */}
             <View style={[styles.devSection, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
               <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.1.1 (Expo SDK 51)</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.2.0 (Expo SDK 51)</Text>
             </View>
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
-      {/* Manual / Guide Modal */}
+      {/* Manual / Guide Modal (Angepasst mit Backup & Wiederherstellung) */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -817,12 +879,17 @@ export default function App() {
           <ScrollView style={{ padding: 16 }}>
             <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Sicherheit & Biometrische Anmeldung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Beim Start der App und beim Aufdecken von Passwörtern schützt dich die biometrische Authentifizierung, damit sensible Daten sicher bleiben.
+              Beim Start der App und beim Aufdecken von Passwörtern schützt dich die biometrische Authentifizierung.
             </Text>
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Auto-Lock Timer</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Die App sperrt sich automatisch nach dem in den Einstellungen festgelegten Zeitraum (in Minuten) bei Inaktivität.
+              Die App sperrt sich nach Ablauf der eingestellten Minuten bei Inaktivität automatisch.
+            </Text>
+
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Backup & Wiederherstellung</Text>
+            <Text style={[styles.guideText, { color: theme.subtext }]}>
+              Du kannst in den Einstellungen jederzeit ein JSON-Backup deiner Tresor-Einträge exportieren und bei Bedarf importieren, um deine Daten auf ein neues Gerät zu übertragen.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -1108,6 +1175,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     marginTop: 4
+  },
+  backupBtn: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   strengthContainer: {
     marginBottom: 16
