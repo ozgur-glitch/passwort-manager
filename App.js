@@ -19,6 +19,7 @@ import {
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
+import CryptoJS from 'crypto-js';
 
 export default function App() {
   const [isLocked, setIsLocked] = useState(true);
@@ -47,6 +48,12 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [showPasswordId, setShowPasswordId] = useState(null);
+
+  // Backup Password Modal States
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [backupPassword, setBackupPassword] = useState('');
+  const [backupActionType, setBackupActionType] = useState(null); // 'export' or 'import'
+  const [pendingImportUri, setPendingImportUri] = useState(null);
 
   // Edit / Add States
   const [editingId, setEditingId] = useState(null);
@@ -132,13 +139,49 @@ export default function App() {
     };
   }, [isLocked, autoLockMinutes]);
 
-  // JSON Backup Export
-  const handleExportBackup = async () => {
+  // Backup Export starten (öffnet Passwort-Modal)
+  const handleStartExport = () => {
+    resetInactivityTimer();
+    setBackupPassword('');
+    setBackupActionType('export');
+    setIsBackupModalOpen(true);
+  };
+
+  // Backup Import starten (öffnet Dokumentenauswahl)
+  const handleStartImport = async () => {
     resetInactivityTimer();
     try {
-      const backupData = JSON.stringify({ passwords, autoLockMinutes, isDarkMode }, null, 2);
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', '*/*'],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setPendingImportUri(result.assets[0].uri);
+        setBackupPassword('');
+        setBackupActionType('import');
+        setIsBackupModalOpen(true);
+      }
+    } catch (error) {
+      Alert.alert('Fehler', 'Dateiauswahl fehlgeschlagen: ' + error.message);
+    }
+  };
+
+  // Verschlüsseltes Exportieren durchführen
+  const executeEncryptedExport = async () => {
+    if (!backupPassword) {
+      Alert.alert('Fehler', 'Bitte gib ein Passwort für das Backup ein.');
+      return;
+    }
+
+    try {
+      const rawData = JSON.stringify({ passwords, autoLockMinutes, isDarkMode }, null, 2);
+      
+      // AES Verschlüsselung mit dem Benutzer-Passwort
+      const encryptedData = CryptoJS.AES.encrypt(rawData, backupPassword).toString();
+
       const timestamp = new Date().toISOString().replace(/[:/]/g, '-').slice(0, 19);
-      const fileName = `password_manager_backup_${timestamp}.json`;
+      const fileName = `secure_backup_${timestamp}.enc`;
 
       if (Platform.OS === 'android') {
         const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
@@ -148,56 +191,53 @@ export default function App() {
             fileName,
             'application/json'
           );
-          await FileSystem.writeAsStringAsync(uri, backupData, { encoding: FileSystem.EncodingType.UTF8 });
-          Alert.alert('Erfolg', 'Backup erfolgreich gespeichert.');
+          await FileSystem.writeAsStringAsync(uri, encryptedData, { encoding: FileSystem.EncodingType.UTF8 });
+          setIsBackupModalOpen(false);
+          Alert.alert('Erfolg', 'Verschlüsseltes Backup erfolgreich gespeichert.');
         }
       } else {
         const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-        await FileSystem.writeAsStringAsync(fileUri, backupData, { encoding: FileSystem.EncodingType.UTF8 });
-        Alert.alert('Erfolg', `Backup erstellt unter:\n${fileUri}`);
+        await FileSystem.writeAsStringAsync(fileUri, encryptedData, { encoding: FileSystem.EncodingType.UTF8 });
+        setIsBackupModalOpen(false);
+        Alert.alert('Erfolg', `Verschlüsseltes Backup erstellt unter:\n${fileUri}`);
       }
     } catch (error) {
-      Alert.alert('Fehler', 'Backup konnte nicht erstellt werden: ' + error.message);
+      Alert.alert('Fehler', 'Export fehlgeschlagen: ' + error.message);
     }
   };
 
-  // JSON Backup Import
-  const handleImportBackup = async () => {
-    resetInactivityTimer();
+  // Verschlüsseltes Importieren / Entschlüsseln durchführen
+  const executeEncryptedImport = async () => {
+    if (!backupPassword || !pendingImportUri) {
+      Alert.alert('Fehler', 'Bitte gib das Entschlüsselungs-Passwort ein.');
+      return;
+    }
+
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/json', '*/*'],
-        copyToCacheDirectory: true,
-      });
+      const fileContent = await FileSystem.readAsStringAsync(pendingImportUri);
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const fileUri = result.assets[0].uri;
-        const fileContent = await FileSystem.readAsStringAsync(fileUri);
-        const parsedData = JSON.parse(fileContent);
+      // AES Entschlüsselung
+      const bytes = CryptoJS.AES.decrypt(fileContent, backupPassword);
+      const decryptedString = bytes.toString(CryptoJS.enc.Utf8);
 
-        if (parsedData && Array.isArray(parsedData.passwords)) {
-          Alert.alert(
-            'Backup wiederherstellen',
-            'Möchtest du die Passwörter aus der Backup-Datei laden? Aktuelle Einträge werden überschrieben.',
-            [
-              { text: 'Abbrechen', style: 'cancel' },
-              {
-                text: 'Wiederherstellen',
-                onPress: () => {
-                  setPasswords(parsedData.passwords);
-                  if (parsedData.autoLockMinutes) setAutoLockMinutes(parsedData.autoLockMinutes);
-                  if (typeof parsedData.isDarkMode === 'boolean') setIsDarkMode(parsedData.isDarkMode);
-                  Alert.alert('Erfolg', 'Daten wurden erfolgreich wiederhergestellt!');
-                }
-              }
-            ]
-          );
-        } else {
-          Alert.alert('Fehler', 'Ungültiges Backup-Format.');
-        }
+      if (!decryptedString) {
+        throw new Error('Falsches Passwort oder beschädigte Datei.');
+      }
+
+      const parsedData = JSON.parse(decryptedString);
+
+      if (parsedData && Array.isArray(parsedData.passwords)) {
+        setPasswords(parsedData.passwords);
+        if (parsedData.autoLockMinutes) setAutoLockMinutes(parsedData.autoLockMinutes);
+        if (typeof parsedData.isDarkMode === 'boolean') setIsDarkMode(parsedData.isDarkMode);
+        
+        setIsBackupModalOpen(false);
+        Alert.alert('Erfolg', 'Backup erfolgreich entschlüsselt und wiederhergestellt!');
+      } else {
+        Alert.alert('Fehler', 'Ungültiges Datenformat im Backup.');
       }
     } catch (error) {
-      Alert.alert('Fehler', 'Import fehlgeschlagen: ' + error.message);
+      Alert.alert('Fehler', 'Entschlüsselung fehlgeschlagen. Ist das Passwort korrekt?');
     }
   };
 
@@ -596,6 +636,50 @@ export default function App() {
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
+      {/* Backup Password Modal */}
+      <Modal visible={isBackupModalOpen} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.cardBg }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {backupActionType === 'export' ? 'Backup verschlüsseln' : 'Backup entschlüsseln'}
+            </Text>
+            <Text style={[styles.subtextCustom, { color: theme.subtext, marginBottom: 16, fontSize: 13 }]}>
+              {backupActionType === 'export' 
+                ? 'Gib ein sicheres Passwort ein, um die Backup-Datei zu schützen.' 
+                : 'Gib das Passwort ein, mit dem dieses Backup verschlüsselt wurde.'}
+            </Text>
+
+            <TextInput
+              placeholder="Backup-Passwort"
+              placeholderTextColor={theme.subtext}
+              secureTextEntry
+              style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
+              value={backupPassword}
+              onChangeText={setBackupPassword}
+              autoCapitalize="none"
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: theme.border }]}
+                onPress={() => setIsBackupModalOpen(false)}
+              >
+                <Text style={[styles.btnText, { color: theme.text }]}>Abbrechen</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: theme.primary }]}
+                onPress={backupActionType === 'export' ? executeEncryptedExport : executeEncryptedImport}
+              >
+                <Text style={[styles.btnText, { color: '#FFF' }]}>
+                  {backupActionType === 'export' ? 'Exportieren' : 'Wiederherstellen'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Add / Edit Password Modal */}
       <Modal visible={isModalOpen} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
@@ -726,18 +810,18 @@ export default function App() {
               />
             </View>
 
-            {/* Backup & Wiederherstellung */}
-            <Text style={[styles.sectionHeader, { color: theme.primary }]}>💾 Backup & Wiederherstellung</Text>
+            {/* Backup & Wiederherstellung (AES-Verschlüsselt) */}
+            <Text style={[styles.sectionHeader, { color: theme.primary }]}>💾 Verschlüsselte Backups</Text>
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, marginBottom: 16 }}>
               <TouchableOpacity
                 style={[styles.backupBtn, { backgroundColor: theme.primary, flex: 1 }]}
-                onPress={handleExportBackup}
+                onPress={handleStartExport}
               >
                 <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Backup exportieren</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.backupBtn, { backgroundColor: theme.cardBg, borderColor: theme.border, borderWidth: 1, flex: 1 }]}
-                onPress={handleImportBackup}
+                onPress={handleStartImport}
               >
                 <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 14 }}>Backup importieren</Text>
               </TouchableOpacity>
@@ -858,13 +942,13 @@ export default function App() {
               <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.2.0 (Expo SDK 51)</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.3.0 (AES Verschl. / Expo SDK 51)</Text>
             </View>
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
-      {/* Manual / Guide Modal (Angepasst) */}
+      {/* Manual / Guide Modal */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -887,9 +971,9 @@ export default function App() {
               Die App sperrt sich nach Ablauf des in den Einstellungen festgelegten Zeitraums bei Inaktivität automatisch.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Backup & Wiederherstellung</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Verschlüsselte Backups (AES)</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Du kannst in den Einstellungen jederzeit ein JSON-Backup deiner Tresor-Einträge exportieren und bei Bedarf importieren, um deine Daten zu sichern oder auf ein anderes Gerät zu übertragen.
+              Deine exportierten Backups werden mit einer starken AES-Verschlüsselung und einem von dir gewählten Passwort geschützt. Nur mit diesem Passwort kann die Datei später wieder importiert werden.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -1146,7 +1230,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 16
+    marginBottom: 8
   },
   input: {
     borderWidth: 1,
