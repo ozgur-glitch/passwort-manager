@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -17,6 +18,10 @@ import {
 } from 'react-native';
 
 export default function App() {
+  const [isLocked, setIsLocked] = useState(false);
+  const [autoLockMinutes, setAutoLockMinutes] = useState('5');
+  const inactivityTimerRef = useRef(null);
+
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [passwords, setPasswords] = useState([
     { id: '1', title: 'E-Mail Account', username: 'max.mustermann@example.com', password: 'Password123!', link: 'https://mail.example.com', lastChanged: '14.11.2026' },
@@ -49,6 +54,28 @@ export default function App() {
   const [lastChangedInput, setLastChangedInput] = useState('');
 
   const theme = isDarkMode ? darkTheme : lightTheme;
+
+  // Auto-Lock Inaktivitäts-Timer Logik
+  const resetInactivityTimer = () => {
+    if (isLocked) return;
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+
+    const mins = parseFloat(autoLockMinutes) || 5;
+    const timeoutMs = mins * 60 * 1000;
+
+    inactivityTimerRef.current = setTimeout(() => {
+      setIsLocked(true);
+    }, timeoutMs);
+  };
+
+  useEffect(() => {
+    resetInactivityTimer();
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    };
+  }, [isLocked, autoLockMinutes]);
 
   const isPasswordWeak = (pwd) => pwd.length < 8;
 
@@ -110,6 +137,7 @@ export default function App() {
   };
 
   const toggleExpand = (id) => {
+    resetInactivityTimer();
     setExpandedIds(prev => ({
       ...prev,
       [id]: !prev[id]
@@ -117,6 +145,7 @@ export default function App() {
   };
 
   const handleOpenAddModal = () => {
+    resetInactivityTimer();
     setEditingId(null);
     setTitle('');
     setUsername('');
@@ -127,6 +156,7 @@ export default function App() {
   };
 
   const handleOpenEditModal = (item) => {
+    resetInactivityTimer();
     setEditingId(item.id);
     setTitle(item.title);
     setUsername(item.username);
@@ -137,6 +167,7 @@ export default function App() {
   };
 
   const handleSavePassword = () => {
+    resetInactivityTimer();
     if (!title || !password) {
       Alert.alert('Fehler', 'Bitte gib mindestens einen Titel und ein Passwort ein.');
       return;
@@ -166,10 +197,12 @@ export default function App() {
   };
 
   const handleDeletePassword = (id) => {
+    resetInactivityTimer();
     setPasswords(passwords.filter(item => item.id !== id));
   };
 
   const generateRandomPassword = () => {
+    resetInactivityTimer();
     let chars = 'abcdefghijklmnopqrstuvwxyz';
     if (useUppercase) chars += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     if (useNumbers) chars += '0123456789';
@@ -184,11 +217,13 @@ export default function App() {
   };
 
   const copyToClipboard = (text, label) => {
+    resetInactivityTimer();
     Clipboard.setString(text);
     Alert.alert('Kopiert!', `${label} wurde in die Zwischenablage kopiert.`);
   };
 
   const openLink = (url) => {
+    resetInactivityTimer();
     if (!url) return;
     let formattedUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -230,6 +265,7 @@ export default function App() {
   });
 
   const jumpToFilter = (type) => {
+    resetInactivityTimer();
     setActiveAuditFilter(type);
     setIsSettingsOpen(false);
   };
@@ -243,8 +279,33 @@ export default function App() {
 
   const strengthInfo = calculatePasswordStrength(password);
 
+  // Wenn gesperrt durch Auto-Lock Inaktivität
+  if (isLocked) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg, justifyContent: 'center', padding: 24 }]}>
+        <StatusBar barStyle="light-content" />
+        <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border, padding: 20 }]}>
+          <Text style={{ fontSize: 32, textAlign: 'center', marginBottom: 10 }}>🔒</Text>
+          <Text style={[styles.modalTitle, { textAlign: 'center', color: theme.text }]}>Automatisch gesperrt</Text>
+          <Text style={[styles.subtextCustom, { color: theme.subtext, textAlign: 'center', marginBottom: 20 }]}>
+            Die App wurde wegen Inaktivität automatisch gesperrt.
+          </Text>
+          <TouchableOpacity
+            style={[styles.btnFull, { backgroundColor: theme.primary }]}
+            onPress={() => setIsLocked(false)}
+          >
+            <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Entsperren</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+    <SafeAreaView 
+      style={[styles.container, { backgroundColor: theme.bg }]}
+      onTouchStart={resetInactivityTimer}
+    >
       <StatusBar barStyle="light-content" />
 
       {/* Header */}
@@ -253,7 +314,7 @@ export default function App() {
           <Text style={{ fontSize: 22, marginRight: 8 }}>🔐</Text>
           <Text style={styles.headerTitle}>Password Manager</Text>
         </View>
-        <TouchableOpacity onPress={() => setIsSettingsOpen(true)} style={styles.iconButton}>
+        <TouchableOpacity onPress={() => { resetInactivityTimer(); setIsSettingsOpen(true); }} style={styles.iconButton}>
           <Text style={{ fontSize: 20 }}>⚙️</Text>
         </TouchableOpacity>
       </View>
@@ -266,7 +327,7 @@ export default function App() {
             placeholderTextColor={theme.subtext}
             style={[styles.searchInput, { color: theme.text }]}
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={(text) => { resetInactivityTimer(); setSearchQuery(text); }}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
@@ -481,7 +542,7 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* NEU: Live Passwort-Stärke-Anzeige (Balken & Prozent) */}
+            {/* Live Passwort-Stärke-Anzeige */}
             <View style={styles.strengthContainer}>
               <View style={styles.strengthHeaderRow}>
                 <Text style={[styles.strengthLabelTitle, { color: theme.subtext }]}>Sicherheit:</Text>
@@ -535,6 +596,21 @@ export default function App() {
             <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
               <Text style={[styles.settingText, { color: theme.text }]}>Dunkelmodus</Text>
               <Switch value={isDarkMode} onValueChange={setIsDarkMode} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
+            </View>
+
+            {/* NEU: Auto-Lock / Timer Einstellung */}
+            <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={[styles.settingText, { color: theme.text }]}>Auto-Lock (Minuten)</Text>
+                <Text style={{ fontSize: 11, color: theme.subtext, marginTop: 2 }}>Sperrt die App nach Inaktivität</Text>
+              </View>
+              <TextInput
+                style={[styles.numberInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
+                value={autoLockMinutes}
+                onChangeText={setAutoLockMinutes}
+                keyboardType="numeric"
+                maxLength={3}
+              />
             </View>
 
             {/* Sicherheits-Check */}
@@ -668,7 +744,7 @@ export default function App() {
               <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 2.6.0 (Expo SDK 51)</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.0.0 (Expo SDK 51)</Text>
             </View>
           </ScrollView>
         </SafeAreaView>
@@ -687,9 +763,9 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Live-Passwortstärke</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Auto-Lock Timer</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Beim Erstellen oder Bearbeiten eines Passworts wird dir direkt ein Fortschrittsbalken mit Prozentanzeige angezeigt, der die Sicherheit des Passworts live bewertet.
+              Die App sperrt sich automatisch nach dem in den Einstellungen festgelegten Zeitraum (in Minuten) bei Inaktivität, damit deine Daten geschützt sind.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -957,6 +1033,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center'
+  },
+  btnFull: {
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 4
   },
   strengthContainer: {
     marginBottom: 16
