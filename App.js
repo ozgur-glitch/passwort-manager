@@ -157,7 +157,6 @@ export default function App() {
     }
   };
 
-  // Hilfsfunktion: Passwort in einen sicheren AES-Schlüssel via SHA-256 umwandeln
   const deriveKey = async (password) => {
     return await Crypto.digestStringAsync(
       Crypto.CryptoDigestAlgorithm.SHA256,
@@ -173,12 +172,11 @@ export default function App() {
 
     try {
       const rawData = JSON.stringify({ passwords, autoLockMinutes, isDarkMode }, null, 2);
-      
-        // Einfacher, sicherer Base64-Schutz kombiniert mit Hash (oder Payload-Verschlüsselung)
-        // Alternativ nutzen wir hier einen sauberen Base64-Wrapper mit Passwort-Check
       const keyHash = await deriveKey(backupPassword);
       const payload = JSON.stringify({ keyHash, data: rawData });
-      const encodedData = Buffer.from ? Buffer.from(payload).toString('base64') : btoa(payload);
+      
+      // Korrigierte Base64-Kodierung ohne Buffer
+      const encodedData = btoa(unescape(encodeURIComponent(payload)));
 
       const timestamp = new Date().toISOString().replace(/[:/]/g, '-').slice(0, 19);
       const fileName = `secure_backup_${timestamp}.enc`;
@@ -214,7 +212,9 @@ export default function App() {
 
     try {
       const fileContent = await FileSystem.readAsStringAsync(pendingImportUri);
-      const decodedString = Buffer.from ? Buffer.from(fileContent, 'base64').toString('utf8') : atob(fileContent);
+      
+      // Korrigierte Base64-Dekodierung ohne Buffer
+      const decodedString = decodeURIComponent(escape(atob(fileContent)));
       const parsedPayload = JSON.parse(decodedString);
 
       const enteredKeyHash = await deriveKey(backupPassword);
@@ -935,7 +935,7 @@ export default function App() {
               <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.4.0 (Native Crypto / Expo SDK 51)</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.4.1 (Native Crypto / Expo SDK 51)</Text>
             </View>
           </ScrollView>
         </SafeAreaView>
