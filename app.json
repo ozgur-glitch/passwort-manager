@@ -13,7 +13,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ceozsteam.passwortmanager"
+      "bundleIdentifier": "com.ceozsteam.passwortmanager",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Diese App benötigt Face ID, um den Tresor sicher zu entsperren."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,6 +28,14 @@
     "web": {
       "favicon": "./favicon.png"
     },
+    "plugins": [
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Erlaube $(PRODUCT_NAME) die Verwendung von Face ID zur Entsperrung."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "67695cfd-4d30-4d09-9a4b-1eaaa19f0403"
