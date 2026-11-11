@@ -62,7 +62,6 @@ export default function App() {
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
       if (!hasHardware || !isEnrolled) {
-        // Falls keine Biometrie verfügbar ist, direkt entsperren
         setIsLocked(false);
         return;
       }
@@ -332,15 +331,15 @@ export default function App() {
 
   const strengthInfo = calculatePasswordStrength(password);
 
-  // Wenn gesperrt (durch Biometrie oder Auto-Lock)
+  // Wenn gesperrt (durch Biometrie oder Auto-Lock) - Layout korrigiert für saubere Darstellung
   if (isLocked) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg, justifyContent: 'center', padding: 24 }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
         <StatusBar barStyle="light-content" />
-        <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border, padding: 20 }]}>
-          <Text style={{ fontSize: 32, textAlign: 'center', marginBottom: 10 }}>🛡️</Text>
+        <View style={[styles.lockCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+          <Text style={{ fontSize: 40, textAlign: 'center', marginBottom: 12 }}>🛡️</Text>
           <Text style={[styles.modalTitle, { textAlign: 'center', color: theme.text }]}>Biometrisch geschützt</Text>
-          <Text style={[styles.subtextCustom, { color: theme.subtext, textAlign: 'center', marginBottom: 20 }]}>
+          <Text style={[styles.subtextCustom, { color: theme.subtext, textAlign: 'center', marginBottom: 24, lineHeight: 20 }]}>
             Bitte authentifiziere dich per Gesichtserkennung oder Fingerabdruck, um den Tresor zu öffnen.
           </Text>
           <TouchableOpacity
@@ -797,13 +796,13 @@ export default function App() {
               <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.1.0 (Expo SDK 51)</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.1.1 (Expo SDK 51)</Text>
             </View>
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
-      {/* Manual / Guide Modal (Angepasst mit Biometrie & Auto-Lock) */}
+      {/* Manual / Guide Modal */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -818,7 +817,7 @@ export default function App() {
           <ScrollView style={{ padding: 16 }}>
             <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Sicherheit & Biometrische Anmeldung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Beim Start der App und beim Aufdecken von Passwörtern schützt dich die biometrische Authentifizierung (Face ID / Fingerabdruck über `expo-local-authentication`), damit sensible Daten sicher bleiben.
+              Beim Start der App und beim Aufdecken von Passwörtern schützt dich die biometrische Authentifizierung, damit sensible Daten sicher bleiben.
             </Text>
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Auto-Lock Timer</Text>
@@ -865,6 +864,18 @@ const darkTheme = {
 const styles = StyleSheet.create({
   container: {
     flex: 1
+  },
+  lockCard: {
+    width: '88%',
+    maxWidth: 380,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 24,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8
   },
   header: {
     flexDirection: 'row',
