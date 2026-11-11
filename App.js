@@ -15,9 +15,10 @@ import {
   Linking,
   Clipboard
 } from 'react-native';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 export default function App() {
-  const [isLocked, setIsLocked] = useState(false);
+  const [isLocked, setIsLocked] = useState(true);
   const [autoLockMinutes, setAutoLockMinutes] = useState('5');
   const inactivityTimerRef = useRef(null);
 
@@ -53,6 +54,59 @@ export default function App() {
   const [lastChangedInput, setLastChangedInput] = useState('');
 
   const theme = isDarkMode ? darkTheme : lightTheme;
+
+  // Biometrische Authentifizierung beim Start / Entsperren
+  const authenticateWithBiometrics = async () => {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+      if (!hasHardware || !isEnrolled) {
+        // Falls keine Biometrie verfügbar ist, direkt entsperren
+        setIsLocked(false);
+        return;
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Tresor entsperren',
+        fallbackLabel: 'PIN verwenden',
+      });
+
+      if (result.success) {
+        setIsLocked(false);
+      } else {
+        Alert.alert('Fehler', 'Biometrische Anmeldung fehlgeschlagen.');
+      }
+    } catch (error) {
+      setIsLocked(false);
+    }
+  };
+
+  useEffect(() => {
+    authenticateWithBiometrics();
+  }, []);
+
+  // Biometrischer Schutz beim Aufdecken eines Passworts
+  const handleRevealPassword = async (itemId, currentPwd) => {
+    if (showPasswordId === itemId) {
+      setShowPasswordId(null);
+      return;
+    }
+
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Identität bestätigen, um Passwort anzuzeigen',
+      });
+
+      if (result.success) {
+        setShowPasswordId(itemId);
+      } else {
+        Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
+      }
+    } catch (error) {
+      setShowPasswordId(itemId);
+    }
+  };
 
   // Auto-Lock Inaktivitäts-Timer Logik
   const resetInactivityTimer = () => {
@@ -278,22 +332,22 @@ export default function App() {
 
   const strengthInfo = calculatePasswordStrength(password);
 
-  // Wenn gesperrt durch Auto-Lock Inaktivität
+  // Wenn gesperrt (durch Biometrie oder Auto-Lock)
   if (isLocked) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg, justifyContent: 'center', padding: 24 }]}>
         <StatusBar barStyle="light-content" />
         <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border, padding: 20 }]}>
-          <Text style={{ fontSize: 32, textAlign: 'center', marginBottom: 10 }}>🔒</Text>
-          <Text style={[styles.modalTitle, { textAlign: 'center', color: theme.text }]}>Automatisch gesperrt</Text>
+          <Text style={{ fontSize: 32, textAlign: 'center', marginBottom: 10 }}>🛡️</Text>
+          <Text style={[styles.modalTitle, { textAlign: 'center', color: theme.text }]}>Biometrisch geschützt</Text>
           <Text style={[styles.subtextCustom, { color: theme.subtext, textAlign: 'center', marginBottom: 20 }]}>
-            Die App wurde wegen Inaktivität automatisch gesperrt.
+            Bitte authentifiziere dich per Gesichtserkennung oder Fingerabdruck, um den Tresor zu öffnen.
           </Text>
           <TouchableOpacity
             style={[styles.btnFull, { backgroundColor: theme.primary }]}
-            onPress={() => setIsLocked(false)}
+            onPress={authenticateWithBiometrics}
           >
-            <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Entsperren</Text>
+            <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Mit Biometrie entsperren</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -449,7 +503,7 @@ export default function App() {
                       <View style={{ flexDirection: 'row', gap: 6 }}>
                         <TouchableOpacity 
                           style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} 
-                          onPress={() => setShowPasswordId(showPasswordId === item.id ? null : item.id)}
+                          onPress={() => handleRevealPassword(item.id, item.password)}
                         >
                           <Text style={[styles.miniBtnText, { color: theme.primary }]}>
                             {showPasswordId === item.id ? 'Verbergen' : 'Anzeigen'}
@@ -597,7 +651,7 @@ export default function App() {
               <Switch value={isDarkMode} onValueChange={setIsDarkMode} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
             </View>
 
-            {/* NEU: Auto-Lock / Timer Einstellung */}
+            {/* Auto-Lock / Timer Einstellung */}
             <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
               <View style={{ flex: 1, marginRight: 10 }}>
                 <Text style={[styles.settingText, { color: theme.text }]}>Auto-Lock (Minuten)</Text>
@@ -743,13 +797,13 @@ export default function App() {
               <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.0.0 (Expo SDK 51)</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.1.0 (Expo SDK 51)</Text>
             </View>
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
-      {/* Manual / Guide Modal */}
+      {/* Manual / Guide Modal (Angepasst mit Biometrie & Auto-Lock) */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -762,9 +816,14 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Auto-Lock Timer</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Sicherheit & Biometrische Anmeldung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Die App sperrt sich automatisch nach dem in den Einstellungen festgelegten Zeitraum (in Minuten) bei Inaktivität, damit deine Daten geschützt sind.
+              Beim Start der App und beim Aufdecken von Passwörtern schützt dich die biometrische Authentifizierung (Face ID / Fingerabdruck über `expo-local-authentication`), damit sensible Daten sicher bleiben.
+            </Text>
+
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Auto-Lock Timer</Text>
+            <Text style={[styles.guideText, { color: theme.subtext }]}>
+              Die App sperrt sich automatisch nach dem in den Einstellungen festgelegten Zeitraum (in Minuten) bei Inaktivität.
             </Text>
           </ScrollView>
         </SafeAreaView>
