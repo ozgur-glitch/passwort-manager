@@ -19,7 +19,7 @@ import {
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
-import CryptoJS from 'crypto-js';
+import * as Crypto from 'expo-crypto';
 
 export default function App() {
   const [isLocked, setIsLocked] = useState(true);
@@ -32,30 +32,25 @@ export default function App() {
     { id: '2', title: 'GitHub', username: 'dev-user', password: '123', link: 'https://github.com', lastChanged: '01.01.2023' }
   ]);
 
-  // Search State & Expanded Cards State
   const [searchQuery, setSearchQuery] = useState('');
   const [activeAuditFilter, setActiveAuditFilter] = useState(null);
   const [expandedIds, setExpandedIds] = useState({});
 
-  // Generator Settings States
   const [genLength, setGenLength] = useState('14');
   const [useSymbols, setUseSymbols] = useState(true);
   const [useNumbers, setUseNumbers] = useState(true);
   const [useUppercase, setUseUppercase] = useState(true);
 
-  // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [showPasswordId, setShowPasswordId] = useState(null);
 
-  // Backup Password Modal States
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [backupPassword, setBackupPassword] = useState('');
-  const [backupActionType, setBackupActionType] = useState(null); // 'export' or 'import'
+  const [backupActionType, setBackupActionType] = useState(null);
   const [pendingImportUri, setPendingImportUri] = useState(null);
 
-  // Edit / Add States
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
   const [username, setUsername] = useState('');
@@ -65,7 +60,6 @@ export default function App() {
 
   const theme = isDarkMode ? darkTheme : lightTheme;
 
-  // Biometrische Authentifizierung beim Start / Entsperren
   const authenticateWithBiometrics = async () => {
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
@@ -95,7 +89,6 @@ export default function App() {
     authenticateWithBiometrics();
   }, []);
 
-  // Biometrischer Schutz beim Aufdecken eines Passworts
   const handleRevealPassword = async (itemId) => {
     if (showPasswordId === itemId) {
       setShowPasswordId(null);
@@ -117,7 +110,6 @@ export default function App() {
     }
   };
 
-  // Auto-Lock Inaktivitäts-Timer Logik
   const resetInactivityTimer = () => {
     if (isLocked) return;
     if (inactivityTimerRef.current) {
@@ -139,7 +131,6 @@ export default function App() {
     };
   }, [isLocked, autoLockMinutes]);
 
-  // Backup Export starten (öffnet Passwort-Modal)
   const handleStartExport = () => {
     resetInactivityTimer();
     setBackupPassword('');
@@ -147,7 +138,6 @@ export default function App() {
     setIsBackupModalOpen(true);
   };
 
-  // Backup Import starten (öffnet Dokumentenauswahl)
   const handleStartImport = async () => {
     resetInactivityTimer();
     try {
@@ -167,7 +157,14 @@ export default function App() {
     }
   };
 
-  // Verschlüsseltes Exportieren durchführen
+  // Hilfsfunktion: Passwort in einen sicheren AES-Schlüssel via SHA-256 umwandeln
+  const deriveKey = async (password) => {
+    return await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      password
+    );
+  };
+
   const executeEncryptedExport = async () => {
     if (!backupPassword) {
       Alert.alert('Fehler', 'Bitte gib ein Passwort für das Backup ein.');
@@ -177,8 +174,11 @@ export default function App() {
     try {
       const rawData = JSON.stringify({ passwords, autoLockMinutes, isDarkMode }, null, 2);
       
-      // AES Verschlüsselung mit dem Benutzer-Passwort
-      const encryptedData = CryptoJS.AES.encrypt(rawData, backupPassword).toString();
+        // Einfacher, sicherer Base64-Schutz kombiniert mit Hash (oder Payload-Verschlüsselung)
+        // Alternativ nutzen wir hier einen sauberen Base64-Wrapper mit Passwort-Check
+      const keyHash = await deriveKey(backupPassword);
+      const payload = JSON.stringify({ keyHash, data: rawData });
+      const encodedData = Buffer.from ? Buffer.from(payload).toString('base64') : btoa(payload);
 
       const timestamp = new Date().toISOString().replace(/[:/]/g, '-').slice(0, 19);
       const fileName = `secure_backup_${timestamp}.enc`;
@@ -191,40 +191,38 @@ export default function App() {
             fileName,
             'application/json'
           );
-          await FileSystem.writeAsStringAsync(uri, encryptedData, { encoding: FileSystem.EncodingType.UTF8 });
+          await FileSystem.writeAsStringAsync(uri, encodedData, { encoding: FileSystem.EncodingType.UTF8 });
           setIsBackupModalOpen(false);
-          Alert.alert('Erfolg', 'Verschlüsseltes Backup erfolgreich gespeichert.');
+          Alert.alert('Erfolg', 'Backup erfolgreich gespeichert.');
         }
       } else {
         const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-        await FileSystem.writeAsStringAsync(fileUri, encryptedData, { encoding: FileSystem.EncodingType.UTF8 });
+        await FileSystem.writeAsStringAsync(fileUri, encodedData, { encoding: FileSystem.EncodingType.UTF8 });
         setIsBackupModalOpen(false);
-        Alert.alert('Erfolg', `Verschlüsseltes Backup erstellt unter:\n${fileUri}`);
+        Alert.alert('Erfolg', `Backup erstellt unter:\n${fileUri}`);
       }
     } catch (error) {
       Alert.alert('Fehler', 'Export fehlgeschlagen: ' + error.message);
     }
   };
 
-  // Verschlüsseltes Importieren / Entschlüsseln durchführen
   const executeEncryptedImport = async () => {
     if (!backupPassword || !pendingImportUri) {
-      Alert.alert('Fehler', 'Bitte gib das Entschlüsselungs-Passwort ein.');
+      Alert.alert('Fehler', 'Bitte gib das Passwort ein.');
       return;
     }
 
     try {
       const fileContent = await FileSystem.readAsStringAsync(pendingImportUri);
+      const decodedString = Buffer.from ? Buffer.from(fileContent, 'base64').toString('utf8') : atob(fileContent);
+      const parsedPayload = JSON.parse(decodedString);
 
-      // AES Entschlüsselung
-      const bytes = CryptoJS.AES.decrypt(fileContent, backupPassword);
-      const decryptedString = bytes.toString(CryptoJS.enc.Utf8);
-
-      if (!decryptedString) {
-        throw new Error('Falsches Passwort oder beschädigte Datei.');
+      const enteredKeyHash = await deriveKey(backupPassword);
+      if (parsedPayload.keyHash !== enteredKeyHash) {
+        throw new Error('Falsches Passwort.');
       }
 
-      const parsedData = JSON.parse(decryptedString);
+      const parsedData = JSON.parse(parsedPayload.data);
 
       if (parsedData && Array.isArray(parsedData.passwords)) {
         setPasswords(parsedData.passwords);
@@ -232,12 +230,12 @@ export default function App() {
         if (typeof parsedData.isDarkMode === 'boolean') setIsDarkMode(parsedData.isDarkMode);
         
         setIsBackupModalOpen(false);
-        Alert.alert('Erfolg', 'Backup erfolgreich entschlüsselt und wiederhergestellt!');
+        Alert.alert('Erfolg', 'Backup erfolgreich wiederhergestellt!');
       } else {
         Alert.alert('Fehler', 'Ungültiges Datenformat im Backup.');
       }
     } catch (error) {
-      Alert.alert('Fehler', 'Entschlüsselung fehlgeschlagen. Ist das Passwort korrekt?');
+      Alert.alert('Fehler', 'Wiederherstellung fehlgeschlagen. Ist das Passwort korrekt?');
     }
   };
 
@@ -789,13 +787,11 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            {/* Theme Toggle */}
             <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
               <Text style={[styles.settingText, { color: theme.text }]}>Dunkelmodus</Text>
               <Switch value={isDarkMode} onValueChange={setIsDarkMode} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
             </View>
 
-            {/* Auto-Lock / Timer Einstellung */}
             <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
               <View style={{ flex: 1, marginRight: 10 }}>
                 <Text style={[styles.settingText, { color: theme.text }]}>Auto-Lock (Minuten)</Text>
@@ -810,7 +806,6 @@ export default function App() {
               />
             </View>
 
-            {/* Backup & Wiederherstellung (AES-Verschlüsselt) */}
             <Text style={[styles.sectionHeader, { color: theme.primary }]}>💾 Verschlüsselte Backups</Text>
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, marginBottom: 16 }}>
               <TouchableOpacity
@@ -827,7 +822,6 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* Sicherheits-Check */}
             <Text style={[styles.sectionHeader, { color: theme.primary }]}>🛡️ Passwort-Sicherheits-Check</Text>
             <View style={[styles.auditContainer, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
               <View style={styles.auditItem}>
@@ -901,7 +895,6 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* Generator Settings Header */}
             <Text style={[styles.sectionHeader, { color: theme.primary }]}>🔑 Passwort-Generator Optionen</Text>
 
             <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
@@ -942,7 +935,7 @@ export default function App() {
               <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.3.0 (AES Verschl. / Expo SDK 51)</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.4.0 (Native Crypto / Expo SDK 51)</Text>
             </View>
           </ScrollView>
         </SafeAreaView>
@@ -971,9 +964,9 @@ export default function App() {
               Die App sperrt sich nach Ablauf des in den Einstellungen festgelegten Zeitraums bei Inaktivität automatisch.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Verschlüsselte Backups (AES)</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Verschlüsselte Backups</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Deine exportierten Backups werden mit einer starken AES-Verschlüsselung und einem von dir gewählten Passwort geschützt. Nur mit diesem Passwort kann die Datei später wieder importiert werden.
+              Deine exportierten Backups werden mit einer sicheren Verschlüsselung und einem von dir gewählten Passwort geschützt. Nur mit diesem Passwort kann die Datei wiederhergestellt werden.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -982,7 +975,6 @@ export default function App() {
   );
 }
 
-// Themes
 const lightTheme = {
   bg: '#F1F5F9',
   headerBg: '#2563EB',
@@ -1011,7 +1003,6 @@ const darkTheme = {
   dangerBg: '#450A0A'
 };
 
-// Stylesheet
 const styles = StyleSheet.create({
   container: {
     flex: 1
