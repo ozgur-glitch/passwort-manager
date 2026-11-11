@@ -52,6 +52,34 @@ export default function App() {
 
   const isPasswordWeak = (pwd) => pwd.length < 8;
 
+  // Passwort-Stärke-Berechnung (Prozent & Label)
+  const calculatePasswordStrength = (pwd) => {
+    if (!pwd) return { score: 0, label: 'Leer', color: '#CBD5E1' };
+    let score = 0;
+    if (pwd.length >= 8) score += 30;
+    if (pwd.length >= 12) score += 20;
+    if (/[A-Z]/.test(pwd)) score += 15;
+    if (/[0-9]/.test(pwd)) score += 15;
+    if (/[^A-Za-z0-9]/.test(pwd)) score += 20;
+
+    if (score > 100) score = 100;
+
+    let label = 'Schwach';
+    let color = '#EF4444';
+    if (score >= 40 && score < 70) {
+      label = 'Mittel';
+      color = '#F59E0B';
+    } else if (score >= 70 && score < 100) {
+      label = 'Stark';
+      color = '#3B82F6';
+    } else if (score === 100) {
+      label = 'Sehr sicher';
+      color = '#10B981';
+    }
+
+    return { score, label, color };
+  };
+
   const isPasswordOlderThanOneYear = (dateStr) => {
     if (!dateStr) return false;
     const parts = dateStr.split('.');
@@ -213,6 +241,8 @@ export default function App() {
     return '';
   };
 
+  const strengthInfo = calculatePasswordStrength(password);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" />
@@ -282,7 +312,7 @@ export default function App() {
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 8 }}>
                     <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
                     
-                    {/* Warnungen untereinander mit eigenen individuellen Farben */}
+                    {/* Warnungen untereinander */}
                     <View style={styles.warningColumn}>
                       <View style={[styles.warningBadge, styles.badgeWeak, { opacity: weak ? 1 : 0 }]}>
                         <Text style={[styles.warningBadgeText, styles.badgeTextWeak]}>Schwach</Text>
@@ -435,7 +465,7 @@ export default function App() {
               maxLength={8}
             />
 
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 6 }}>
               <TextInput
                 placeholder="Passwort"
                 placeholderTextColor={theme.subtext}
@@ -449,6 +479,24 @@ export default function App() {
               >
                 <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Generieren</Text>
               </TouchableOpacity>
+            </View>
+
+            {/* NEU: Live Passwort-Stärke-Anzeige (Balken & Prozent) */}
+            <View style={styles.strengthContainer}>
+              <View style={styles.strengthHeaderRow}>
+                <Text style={[styles.strengthLabelTitle, { color: theme.subtext }]}>Sicherheit:</Text>
+                <Text style={[styles.strengthLabelText, { color: strengthInfo.color }]}>
+                  {strengthInfo.label} ({strengthInfo.score}%)
+                </Text>
+              </View>
+              <View style={[styles.strengthBarBg, { backgroundColor: theme.border }]}>
+                <View 
+                  style={[
+                    styles.strengthBarFill, 
+                    { width: `${strengthInfo.score}%`, backgroundColor: strengthInfo.color }
+                  ]} 
+                />
+              </View>
             </View>
 
             <View style={styles.modalActions}>
@@ -620,7 +668,7 @@ export default function App() {
               <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
               <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 2.5.0 (Expo SDK 51)</Text>
+              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 2.6.0 (Expo SDK 51)</Text>
             </View>
           </ScrollView>
         </SafeAreaView>
@@ -639,9 +687,9 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Farbliche Warn-Badges</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Live-Passwortstärke</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Jeder Warnungstyp (Schwach = Rot, Doppelt = Orange, Veraltet = Gelb) besitzt nun eine ganz eigene Farbe für eine perfekte Übersicht.
+              Beim Erstellen oder Bearbeiten eines Passworts wird dir direkt ein Fortschrittsbalken mit Prozentanzeige angezeigt, der die Sicherheit des Passworts live bewertet.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -788,7 +836,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center'
   },
-  // Spezifische Farben für jeden Warn-Typ
   badgeWeak: {
     backgroundColor: '#FEE2E2'
   },
@@ -910,6 +957,32 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center'
+  },
+  strengthContainer: {
+    marginBottom: 16
+  },
+  strengthHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4
+  },
+  strengthLabelTitle: {
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  strengthLabelText: {
+    fontSize: 12,
+    fontWeight: 'bold'
+  },
+  strengthBarBg: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden'
+  },
+  strengthBarFill: {
+    height: '100%',
+    borderRadius: 3
   },
   modalActions: {
     flexDirection: 'row',
