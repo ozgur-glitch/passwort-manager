@@ -21,7 +21,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Crypto from 'expo-crypto';
-import AsyncStorage from '@-react-native-async-storage/async-storage'; // Korrektur: AsyncStorage importiert
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Korrekt ohne Minuszeichen
 
 export default function App() {
   const [isLocked, setIsLocked] = useState(true);
@@ -81,7 +81,6 @@ export default function App() {
       if (storedPasswords) {
         setPasswords(JSON.parse(storedPasswords));
       } else {
-        // Standardwerte falls noch nichts gespeichert ist
         const initialDefault = [
           { 
             id: '1', 
@@ -113,7 +112,6 @@ export default function App() {
     }
   };
 
-  // Funktion zum Speichern der Passwörter bei Änderungen
   const savePasswordsToStorage = async (newPasswords) => {
     try {
       setPasswords(newPasswords);
@@ -123,7 +121,6 @@ export default function App() {
     }
   };
 
-  // Einstellungen (AutoLock & DarkMode) automatisch sichern
   useEffect(() => {
     AsyncStorage.setItem('@autolock_key', autoLockMinutes);
   }, [autoLockMinutes]);
@@ -381,7 +378,7 @@ export default function App() {
 
     updatedList.sort((a, b) => a.title.localeCompare(b.title, 'de', { sensitivity: 'base' }));
 
-    savePasswordsToStorage(updatedList); // Dauerhaft speichern
+    savePasswordsToStorage(updatedList);
     setIsModalOpen(false);
   };
 
@@ -393,7 +390,7 @@ export default function App() {
     }
     resetInactivityTimer();
     const updatedList = passwords.filter(item => item.id !== id);
-    savePasswordsToStorage(updatedList); // Dauerhaft speichern nach dem Löschen
+    savePasswordsToStorage(updatedList);
   };
 
   const generateRandomPassword = () => {
@@ -1000,7 +997,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.8.0 (AsyncStorage integriert)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.8.1 (Import korrigiert)</Text>
                 </View>
               </View>
             )}
