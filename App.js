@@ -21,7 +21,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Crypto from 'expo-crypto';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Korrekt ohne Minuszeichen
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function App() {
   const [isLocked, setIsLocked] = useState(true);
@@ -67,7 +67,6 @@ export default function App() {
 
   const theme = isDarkMode ? darkTheme : lightTheme;
 
-  // Daten beim Start der App laden
   useEffect(() => {
     loadStoredData();
   }, []);
@@ -335,7 +334,14 @@ export default function App() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (item) => {
+  // NEU: Biometrie-Abfrage beim Öffnen des Bearbeiten-Modals
+  const handleOpenEditModal = async (item) => {
+    const success = await authenticateWithBiometrics('Identität bestätigen, um Eintrag zu bearbeiten');
+    if (!success) {
+      Alert.alert('Abgebrochen', 'Biometrische Authentifizierung erforderlich.');
+      return;
+    }
+
     resetInactivityTimer();
     setEditingId(item.id);
     setTitle(item.title);
@@ -997,7 +1003,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.8.1 (Import korrigiert)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.8.2 (Bearbeiten biometrisch gesichert)</Text>
                 </View>
               </View>
             )}
@@ -1018,19 +1024,14 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Dauerhafte Datenspeicherung</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Biometrischer Schutz beim Bearbeiten</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Alle hinzugefügten, bearbeiteten oder gelöschten Passwörter werden nun automatisch auf deinem Gerät gespeichert und gehen beim Schließen der App nicht mehr verloren.
+              Das Bearbeiten (`✏️`) eines Eintrags erfordert nun zwingend eine erfolgreiche biometrische Authentifizierung, um unbefugten Zugriff auf sensible Daten zu verhindern.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Unteraufgaben & Zusatzfelder</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Dauerhafte Datenspeicherung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Du kannst beliebig viele Unteraufgaben zu jedem Eintrag hinzufügen, die beim Aufklappen der Karte sichtbar werden.
-            </Text>
-
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Biometrischer Schutz & Sortierung</Text>
-            <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Der Biometrie-Schutz greift beim Aufklappen und Löschen. Alle Einträge werden stets automatisch alphabetisch aufsteigend sortiert.
+              Alle Daten werden sicher auf dem Gerät mittels AsyncStorage gesichert.
             </Text>
           </ScrollView>
         </SafeAreaView>
