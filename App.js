@@ -21,6 +21,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Crypto from 'expo-crypto';
+import AsyncStorage from '@-react-native-async-storage/async-storage'; // Korrektur: AsyncStorage importiert
 
 export default function App() {
   const [isLocked, setIsLocked] = useState(true);
@@ -28,26 +29,7 @@ export default function App() {
   const inactivityTimerRef = useRef(null);
 
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [passwords, setPasswords] = useState([
-    { 
-      id: '1', 
-      title: 'E-Mail Account', 
-      username: 'max.mustermann@example.com', 
-      password: 'Password123!', 
-      link: 'https://mail.example.com', 
-      lastChanged: '14.11.2026',
-      subTasks: [{ id: 's1', name: 'Wiederherstellungs-PIN', note: '1234' }]
-    },
-    { 
-      id: '2', 
-      title: 'GitHub', 
-      username: 'dev-user', 
-      password: '123', 
-      link: 'https://github.com', 
-      lastChanged: '01.01.2023',
-      subTasks: []
-    }
-  ]);
+  const [passwords, setPasswords] = useState([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeAuditFilter, setActiveAuditFilter] = useState(null);
@@ -70,22 +52,85 @@ export default function App() {
   const [backupActionType, setBackupActionType] = useState(null);
   const [pendingImportUri, setPendingImportUri] = useState(null);
 
-  // Edit / Add States & Ref für automatisches Springen zwischen Feldern
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [link, setLink] = useState('');
   const [lastChangedInput, setLastChangedInput] = useState('');
-  const [subTasks, setSubTasks] = useState([]); // [{id, name, note}]
+  const [subTasks, setSubTasks] = useState([]);
 
-  // Eingabefeld-Refs für Enter/Next Navigation
   const usernameRef = useRef(null);
   const linkRef = useRef(null);
   const dateRef = useRef(null);
   const passwordRef = useRef(null);
 
   const theme = isDarkMode ? darkTheme : lightTheme;
+
+  // Daten beim Start der App laden
+  useEffect(() => {
+    loadStoredData();
+  }, []);
+
+  const loadStoredData = async () => {
+    try {
+      const storedPasswords = await AsyncStorage.getItem('@passwords_key');
+      const storedAutoLock = await AsyncStorage.getItem('@autolock_key');
+      const storedDarkMode = await AsyncStorage.getItem('@darkmode_key');
+
+      if (storedPasswords) {
+        setPasswords(JSON.parse(storedPasswords));
+      } else {
+        // Standardwerte falls noch nichts gespeichert ist
+        const initialDefault = [
+          { 
+            id: '1', 
+            title: 'E-Mail Account', 
+            username: 'max.mustermann@example.com', 
+            password: 'Password123!', 
+            link: 'https://mail.example.com', 
+            lastChanged: '14.11.2026',
+            subTasks: [{ id: 's1', name: 'Wiederherstellungs-PIN', note: '1234' }]
+          },
+          { 
+            id: '2', 
+            title: 'GitHub', 
+            username: 'dev-user', 
+            password: '123', 
+            link: 'https://github.com', 
+            lastChanged: '01.01.2023',
+            subTasks: []
+          }
+        ];
+        setPasswords(initialDefault);
+        await AsyncStorage.setItem('@passwords_key', JSON.stringify(initialDefault));
+      }
+
+      if (storedAutoLock) setAutoLockMinutes(storedAutoLock);
+      if (storedDarkMode) setIsDarkMode(JSON.parse(storedDarkMode));
+    } catch (error) {
+      console.error('Fehler beim Laden der Daten:', error);
+    }
+  };
+
+  // Funktion zum Speichern der Passwörter bei Änderungen
+  const savePasswordsToStorage = async (newPasswords) => {
+    try {
+      setPasswords(newPasswords);
+      await AsyncStorage.setItem('@passwords_key', JSON.stringify(newPasswords));
+    } catch (error) {
+      console.error('Fehler beim Speichern der Passwörter:', error);
+    }
+  };
+
+  // Einstellungen (AutoLock & DarkMode) automatisch sichern
+  useEffect(() => {
+    AsyncStorage.setItem('@autolock_key', autoLockMinutes);
+  }, [autoLockMinutes]);
+
+  useEffect(() => {
+    AsyncStorage.setItem('@darkmode_key', JSON.stringify(isDarkMode));
+  }, [isDarkMode]);
 
   useEffect(() => {
     const backAction = () => {
@@ -122,7 +167,6 @@ export default function App() {
     })();
   }, []);
 
-  // Biometrie NUR beim Aufklappen eines Eintrags verlangen
   const toggleExpand = async (id) => {
     resetInactivityTimer();
     const isCurrentlyExpanded = !!expandedIds[id];
@@ -135,10 +179,7 @@ export default function App() {
       }
     }
 
-    setExpandedIds(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
+    setExpandedIds(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   const resetInactivityTimer = () => {
@@ -230,7 +271,7 @@ export default function App() {
 
       const parsedData = JSON.parse(parsedPayload.data);
       if (parsedData && Array.isArray(parsedData.passwords)) {
-        setPasswords(parsedData.passwords);
+        await savePasswordsToStorage(parsedData.passwords);
         if (parsedData.autoLockMinutes) setAutoLockMinutes(parsedData.autoLockMinutes);
         if (typeof parsedData.isDarkMode === 'boolean') setIsDarkMode(parsedData.isDarkMode);
         setIsBackupModalOpen(false);
@@ -338,14 +379,12 @@ export default function App() {
       updatedList.push(newEntry);
     }
 
-    // Alphabetisch aufsteigend sortieren nach Titel
     updatedList.sort((a, b) => a.title.localeCompare(b.title, 'de', { sensitivity: 'base' }));
 
-    setPasswords(updatedList);
+    savePasswordsToStorage(updatedList); // Dauerhaft speichern
     setIsModalOpen(false);
   };
 
-  // Biometrie NUR beim Löschen eines Eintrags
   const handleDeletePassword = async (id) => {
     const success = await authenticateWithBiometrics('Identität bestätigen, um Eintrag zu löschen');
     if (!success) {
@@ -353,7 +392,8 @@ export default function App() {
       return;
     }
     resetInactivityTimer();
-    setPasswords(passwords.filter(item => item.id !== id));
+    const updatedList = passwords.filter(item => item.id !== id);
+    savePasswordsToStorage(updatedList); // Dauerhaft speichern nach dem Löschen
   };
 
   const generateRandomPassword = () => {
@@ -501,7 +541,7 @@ export default function App() {
         )}
       </View>
 
-      {/* Main List (Alphabetisch sortiert) */}
+      {/* Main List */}
       <FlatList
         data={filteredPasswords}
         keyExtractor={(item) => item.id}
@@ -550,7 +590,6 @@ export default function App() {
                   </View>
                 </View>
 
-                {/* Aufgeklappter Zustand (erfordert Biometrie) */}
                 {isExpanded && (
                   <View style={{ marginTop: 6 }}>
                     {item.username ? (
@@ -614,7 +653,6 @@ export default function App() {
                       </View>
                     </View>
 
-                    {/* Anzeige von Unteraufgaben / Zusatzfeldern */}
                     {item.subTasks && item.subTasks.length > 0 && (
                       <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 6 }}>
                         <Text style={[styles.infoLabel, { color: theme.primary, marginBottom: 4 }]}>Unteraufgaben / Zusatzinfos:</Text>
@@ -680,7 +718,7 @@ export default function App() {
         </View>
       </Modal>
 
-      {/* Add / Edit Password Modal mit Unteraufgaben & automatischer Enter-Loop */}
+      {/* Add / Edit Password Modal */}
       <Modal visible={isModalOpen} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.cardBg, maxHeight: '90%' }]}>
@@ -766,7 +804,6 @@ export default function App() {
                 </View>
               </View>
 
-              {/* Unteraufgaben Sektion */}
               <View style={{ marginTop: 12, marginBottom: 16 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Text style={[styles.settingText, { color: theme.text, fontWeight: 'bold', fontSize: 14 }]}>Unteraufgaben / Zusatzfelder</Text>
@@ -963,7 +1000,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.6.0 (Unteraufgaben & Sortierung)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.8.0 (AsyncStorage integriert)</Text>
                 </View>
               </View>
             )}
@@ -971,7 +1008,7 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
-      {/* Aktualisiertes Handbuch Modal */}
+      {/* Handbuch Modal */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -984,24 +1021,19 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Unteraufgaben & Zusatzfelder</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Dauerhafte Datenspeicherung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Beim Erstellen oder Bearbeiten eines Eintrags kannst du beliebig viele Unteraufgaben hinzufügen (z.B. für Sicherheitsfragen oder PINs). Diese werden beim Aufklappen des Eintrags angezeigt.
+              Alle hinzugefügten, bearbeiteten oder gelöschten Passwörter werden nun automatisch auf deinem Gerät gespeichert und gehen beim Schließen der App nicht mehr verloren.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Biometrischer Schutz & Aktionen</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Unteraufgaben & Zusatzfelder</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Biometrie wird verlangt, wenn du einen Eintrag aufklappst oder löschst. Das Bearbeiten, Anzeigen und Kopieren von Daten ist für eine flüssige Bedienung ohne erneute Biometrie direkt möglich.
+              Du kannst beliebig viele Unteraufgaben zu jedem Eintrag hinzufügen, die beim Aufklappen der Karte sichtbar werden.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Automatische Sortierung</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Biometrischer Schutz & Sortierung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Alle Einträge im Tresor sortieren sich vollautomatisch alphabetisch aufsteigend nach ihrem Titel.
-            </Text>
-
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>4. Tastatur-Navigation (Enter/Next)</Text>
-            <Text style={[styles.guideText, { color: theme.subtext }]}>
-              In den Eingabefeldern springt der Fokus beim Drücken von „Weiter/Enter“ automatisch zur nächsten Zelle weiter.
+              Der Biometrie-Schutz greift beim Aufklappen und Löschen. Alle Einträge werden stets automatisch alphabetisch aufsteigend sortiert.
             </Text>
           </ScrollView>
         </SafeAreaView>
