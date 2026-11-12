@@ -14,7 +14,8 @@ import {
   Alert,
   Linking,
   Clipboard,
-  Platform
+  Platform,
+  BackHandler
 } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as FileSystem from 'expo-file-system';
@@ -41,6 +42,9 @@ export default function App() {
   const [useNumbers, setUseNumbers] = useState(true);
   const [useUppercase, setUseUppercase] = useState(true);
 
+  // Settings Tab State ('security' | 'generator' | 'general')
+  const [settingsTab, setSettingsTab] = useState('security');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
@@ -60,34 +64,89 @@ export default function App() {
 
   const theme = isDarkMode ? darkTheme : lightTheme;
 
-  const authenticateWithBiometrics = async () => {
+  // Android Zurück-Taste Handler
+  useEffect(() => {
+    const backAction = () => {
+      if (isGuideOpen) {
+        setIsGuideOpen(false);
+        return true;
+      }
+      if (isSettingsOpen) {
+        setIsSettingsOpen(false);
+        return true;
+      }
+      if (isModalOpen) {
+        setIsModalOpen(false);
+        return true;
+      }
+      if (isBackupModalOpen) {
+        setIsBackupModalOpen(false);
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [isGuideOpen, isSettingsOpen, isModalOpen, isBackupModalOpen]);
+
+  const authenticateWithBiometrics = async (promptMessage = 'Identität bestätigen') => {
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
       if (!hasHardware || !isEnrolled) {
-        setIsLocked(false);
-        return;
+        return true; // Direkt erlauben, wenn keine Biometrie verfügbar
       }
 
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Tresor entsperren',
+        promptMessage: promptMessage,
         fallbackLabel: 'PIN verwenden',
       });
 
-      if (result.success) {
-        setIsLocked(false);
-      } else {
-        Alert.alert('Fehler', 'Biometrische Anmeldung fehlgeschlagen.');
-      }
+      return result.success;
     } catch (error) {
-      setIsLocked(false);
+      return false;
     }
   };
 
   useEffect(() => {
-    authenticateWithBiometrics();
+    (async () => {
+      const success = await authenticateWithBiometrics('Tresor entsperren');
+      if (success) {
+        setIsLocked(false);
+      }
+    })();
   }, []);
+
+  // Biometrisch geschütztes Kopieren
+  const handleSecureCopy = async (text, label) => {
+    const success = await authenticateWithBiometrics(`Identität bestätigen, um ${label} zu kopieren`);
+    if (success) {
+      resetInactivityTimer();
+      Clipboard.setString(text);
+      Alert.alert('Kopiert!', `${label} wurde in die Zwischenablage kopiert.`);
+    } else {
+      Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
+    }
+  };
+
+  // Biometrisch geschütztes Bearbeiten
+  const handleSecureEdit = async (item) => {
+    const success = await authenticateWithBiometrics('Identität bestätigen, um Eintrag zu bearbeiten');
+    if (success) {
+      resetInactivityTimer();
+      setEditingId(item.id);
+      setTitle(item.title);
+      setUsername(item.username);
+      setPassword(item.password);
+      setLink(item.link || '');
+      setLastChangedInput(item.lastChanged ? item.lastChanged.replace(/\./g, '') : '');
+      setIsModalOpen(true);
+    } else {
+      Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
+    }
+  };
 
   const handleRevealPassword = async (itemId) => {
     if (showPasswordId === itemId) {
@@ -95,18 +154,11 @@ export default function App() {
       return;
     }
 
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Identität bestätigen, um Passwort anzuzeigen',
-      });
-
-      if (result.success) {
-        setShowPasswordId(itemId);
-      } else {
-        Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
-      }
-    } catch (error) {
+    const success = await authenticateWithBiometrics('Identität bestätigen, um Passwort anzuzeigen');
+    if (success) {
       setShowPasswordId(itemId);
+    } else {
+      Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
     }
   };
 
@@ -174,8 +226,6 @@ export default function App() {
       const rawData = JSON.stringify({ passwords, autoLockMinutes, isDarkMode }, null, 2);
       const keyHash = await deriveKey(backupPassword);
       const payload = JSON.stringify({ keyHash, data: rawData });
-      
-      // Korrigierte Base64-Kodierung ohne Buffer
       const encodedData = btoa(unescape(encodeURIComponent(payload)));
 
       const timestamp = new Date().toISOString().replace(/[:/]/g, '-').slice(0, 19);
@@ -212,8 +262,6 @@ export default function App() {
 
     try {
       const fileContent = await FileSystem.readAsStringAsync(pendingImportUri);
-      
-      // Korrigierte Base64-Dekodierung ohne Buffer
       const decodedString = decodeURIComponent(escape(atob(fileContent)));
       const parsedPayload = JSON.parse(decodedString);
 
@@ -305,7 +353,12 @@ export default function App() {
     }));
   };
 
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = async () => {
+    const success = await authenticateWithBiometrics('Identität bestätigen, um neuen Eintrag hinzuzufügen');
+    if (!success) {
+      Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
+      return;
+    }
     resetInactivityTimer();
     setEditingId(null);
     setTitle('');
@@ -313,17 +366,6 @@ export default function App() {
     setPassword('');
     setLink('');
     setLastChangedInput('');
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEditModal = (item) => {
-    resetInactivityTimer();
-    setEditingId(item.id);
-    setTitle(item.title);
-    setUsername(item.username);
-    setPassword(item.password);
-    setLink(item.link || '');
-    setLastChangedInput(item.lastChanged ? item.lastChanged.replace(/\./g, '') : '');
     setIsModalOpen(true);
   };
 
@@ -357,7 +399,12 @@ export default function App() {
     setIsModalOpen(false);
   };
 
-  const handleDeletePassword = (id) => {
+  const handleDeletePassword = async (id) => {
+    const success = await authenticateWithBiometrics('Identität bestätigen, um Eintrag zu löschen');
+    if (!success) {
+      Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
+      return;
+    }
     resetInactivityTimer();
     setPasswords(passwords.filter(item => item.id !== id));
   };
@@ -375,12 +422,6 @@ export default function App() {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     setPassword(result);
-  };
-
-  const copyToClipboard = (text, label) => {
-    resetInactivityTimer();
-    Clipboard.setString(text);
-    Alert.alert('Kopiert!', `${label} wurde in die Zwischenablage kopiert.`);
   };
 
   const openLink = (url) => {
@@ -446,7 +487,7 @@ export default function App() {
           </Text>
           <TouchableOpacity
             style={[styles.btnFull, { backgroundColor: theme.primary }]}
-            onPress={authenticateWithBiometrics}
+            onPress={() => authenticateWithBiometrics('Tresor entsperren').then(succ => succ && setIsLocked(false))}
           >
             <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Mit Biometrie entsperren</Text>
           </TouchableOpacity>
@@ -541,7 +582,7 @@ export default function App() {
                   </View>
 
                   <View style={styles.cardActionsTop}>
-                    <TouchableOpacity onPress={() => handleOpenEditModal(item)} style={[styles.actionIconBtn, { backgroundColor: theme.actionBg }]}>
+                    <TouchableOpacity onPress={() => handleSecureEdit(item)} style={[styles.actionIconBtn, { backgroundColor: theme.actionBg }]}>
                       <Text style={{ fontSize: 14 }}>✏️</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => handleDeletePassword(item.id)} style={[styles.actionIconBtn, { backgroundColor: theme.dangerBg }]}>
@@ -559,7 +600,7 @@ export default function App() {
                           <Text style={[styles.infoLabel, { color: theme.subtext }]}>Benutzername</Text>
                           <Text style={[styles.infoValue, { color: theme.text }]} numberOfLines={1}>{item.username}</Text>
                         </View>
-                        <TouchableOpacity style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} onPress={() => copyToClipboard(item.username, 'Benutzername')}>
+                        <TouchableOpacity style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} onPress={() => handleSecureCopy(item.username, 'Benutzername')}>
                           <Text style={[styles.miniBtnText, { color: theme.primary }]}>Kopieren</Text>
                         </TouchableOpacity>
                       </View>
@@ -608,7 +649,7 @@ export default function App() {
                             {showPasswordId === item.id ? 'Verbergen' : 'Anzeigen'}
                           </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} onPress={() => copyToClipboard(item.password, 'Passwort')}>
+                        <TouchableOpacity style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} onPress={() => handleSecureCopy(item.password, 'Passwort')}>
                           <Text style={[styles.miniBtnText, { color: theme.primary }]}>Kopieren</Text>
                         </TouchableOpacity>
                       </View>
@@ -774,7 +815,7 @@ export default function App() {
         </View>
       </Modal>
 
-      {/* Settings Modal */}
+      {/* Settings Modal (mit Tabs für perfekte Übersicht) */}
       <Modal visible={isSettingsOpen} animationType="slide">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -786,157 +827,194 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={{ padding: 16 }}>
-            <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.settingText, { color: theme.text }]}>Dunkelmodus</Text>
-              <Switch value={isDarkMode} onValueChange={setIsDarkMode} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
-            </View>
-
-            <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={[styles.settingText, { color: theme.text }]}>Auto-Lock (Minuten)</Text>
-                <Text style={{ fontSize: 11, color: theme.subtext, marginTop: 2 }}>Sperrt die App nach Inaktivität</Text>
-              </View>
-              <TextInput
-                style={[styles.numberInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
-                value={autoLockMinutes}
-                onChangeText={setAutoLockMinutes}
-                keyboardType="numeric"
-                maxLength={3}
-              />
-            </View>
-
-            <Text style={[styles.sectionHeader, { color: theme.primary }]}>💾 Verschlüsselte Backups</Text>
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, marginBottom: 16 }}>
-              <TouchableOpacity
-                style={[styles.backupBtn, { backgroundColor: theme.primary, flex: 1 }]}
-                onPress={handleStartExport}
-              >
-                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Backup exportieren</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.backupBtn, { backgroundColor: theme.cardBg, borderColor: theme.border, borderWidth: 1, flex: 1 }]}
-                onPress={handleStartImport}
-              >
-                <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 14 }}>Backup importieren</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={[styles.sectionHeader, { color: theme.primary }]}>🛡️ Passwort-Sicherheits-Check</Text>
-            <View style={[styles.auditContainer, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-              <View style={styles.auditItem}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.auditTitle, { color: theme.text }]}>Gesamteinträge</Text>
-                  <Text style={[styles.auditSub, { color: theme.subtext }]}>Gespeicherte Tresor-Einträge</Text>
-                </View>
-                <View style={styles.auditRightWrapper}>
-                  <View style={[styles.auditBadge, { backgroundColor: theme.inputBg }]}>
-                    <Text style={[styles.auditBadgeText, { color: theme.text }]}>{passwords.length}</Text>
-                  </View>
-                  <View style={styles.arrowPlaceholder} />
-                </View>
-              </View>
-
-              <TouchableOpacity 
-                style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]}
-                onPress={() => jumpToFilter('WEAK')}
-                disabled={weakCount === 0}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.auditTitle, { color: theme.text }]}>Schwache Passwörter</Text>
-                  <Text style={[styles.auditSub, { color: theme.subtext }]}>Weniger als 8 Zeichen</Text>
-                </View>
-                <View style={styles.auditRightWrapper}>
-                  <View style={[styles.auditBadge, { backgroundColor: weakCount > 0 ? '#FEE2E2' : '#D1FAE5' }]}>
-                    <Text style={[styles.auditBadgeText, { color: weakCount > 0 ? '#EF4444' : '#10B981' }]}>
-                      {weakCount} {weakCount > 0 ? '⚠️' : '✅'}
-                    </Text>
-                  </View>
-                  {weakCount > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]}
-                onPress={() => jumpToFilter('DUPLICATES')}
-                disabled={duplicateList.length === 0}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.auditTitle, { color: theme.text }]}>Doppelte Passwörter</Text>
-                  <Text style={[styles.auditSub, { color: theme.subtext }]}>Mehrfach verwendete Codes</Text>
-                </View>
-                <View style={styles.auditRightWrapper}>
-                  <View style={[styles.auditBadge, { backgroundColor: duplicateList.length > 0 ? '#FFEDD5' : '#D1FAE5' }]}>
-                    <Text style={[styles.auditBadgeText, { color: duplicateList.length > 0 ? '#F97316' : '#10B981' }]}>
-                      {duplicateList.length} {duplicateList.length > 0 ? '⚠️' : '✅'}
-                    </Text>
-                  </View>
-                  {duplicateList.length > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]}
-                onPress={() => jumpToFilter('OLD')}
-                disabled={oldPasswordCount === 0}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.auditTitle, { color: theme.text }]}>Älter als 1 Jahr</Text>
-                  <Text style={[styles.auditSub, { color: theme.subtext }]}>Lange nicht geändert</Text>
-                </View>
-                <View style={styles.auditRightWrapper}>
-                  <View style={[styles.auditBadge, { backgroundColor: oldPasswordCount > 0 ? '#FEF3C7' : '#D1FAE5' }]}>
-                    <Text style={[styles.auditBadgeText, { color: oldPasswordCount > 0 ? '#D97706' : '#10B981' }]}>
-                      {oldPasswordCount} {oldPasswordCount > 0 ? '⚠️' : '✅'}
-                    </Text>
-                  </View>
-                  {oldPasswordCount > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={[styles.sectionHeader, { color: theme.primary }]}>🔑 Passwort-Generator Optionen</Text>
-
-            <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.settingText, { color: theme.text }]}>Zeichenlänge</Text>
-              <TextInput
-                style={[styles.numberInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
-                value={genLength}
-                onChangeText={setGenLength}
-                keyboardType="numeric"
-                maxLength={2}
-              />
-            </View>
-
-            <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.settingText, { color: theme.text }]}>Sonderzeichen einschließen (!@#...)</Text>
-              <Switch value={useSymbols} onValueChange={setUseSymbols} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
-            </View>
-
-            <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.settingText, { color: theme.text }]}>Zahlen einschließen (0-9)</Text>
-              <Switch value={useNumbers} onValueChange={setUseNumbers} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
-            </View>
-
-            <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.settingText, { color: theme.text }]}>Großbuchstaben (A-Z)</Text>
-              <Switch value={useUppercase} onValueChange={setUseUppercase} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.settingRow, { borderBottomColor: theme.border, marginTop: 12 }]}
-              onPress={() => setIsGuideOpen(true)}
+          {/* Settings Tab Bar */}
+          <View style={[styles.tabBar, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+            <TouchableOpacity 
+              style={[styles.tabItem, settingsTab === 'security' && { borderBottomColor: theme.primary, borderBottomWidth: 3 }]}
+              onPress={() => setSettingsTab('security')}
             >
-              <Text style={[styles.settingText, { color: theme.text }]}>📖 Benutzerhandbuch</Text>
-              <Text style={{ color: theme.subtext }}>›</Text>
+              <Text style={[styles.tabText, { color: settingsTab === 'security' ? theme.primary : theme.subtext }]}>Sicherheit & Audit</Text>
             </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.tabItem, settingsTab === 'generator' && { borderBottomColor: theme.primary, borderBottomWidth: 3 }]}
+              onPress={() => setSettingsTab('generator')}
+            >
+              <Text style={[styles.tabText, { color: settingsTab === 'generator' ? theme.primary : theme.subtext }]}>Generator</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.tabItem, settingsTab === 'general' && { borderBottomColor: theme.primary, borderBottomWidth: 3 }]}
+              onPress={() => setSettingsTab('general')}
+            >
+              <Text style={[styles.tabText, { color: settingsTab === 'general' ? theme.primary : theme.subtext }]}>Allgemein</Text>
+            </TouchableOpacity>
+          </View>
 
-            <View style={[styles.devSection, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-              <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-              <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.4.1 (Native Crypto / Expo SDK 51)</Text>
-            </View>
+          <ScrollView style={{ padding: 16 }}>
+            {/* TAB 1: Sicherheit, Backup & Audit */}
+            {settingsTab === 'security' && (
+              <View>
+                <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <Text style={[styles.settingText, { color: theme.text }]}>Auto-Lock (Minuten)</Text>
+                    <Text style={{ fontSize: 11, color: theme.subtext, marginTop: 2 }}>Sperrt die App nach Inaktivität</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.numberInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
+                    value={autoLockMinutes}
+                    onChangeText={setAutoLockMinutes}
+                    keyboardType="numeric"
+                    maxLength={3}
+                  />
+                </View>
+
+                <Text style={[styles.sectionHeader, { color: theme.primary }]}>💾 Verschlüsselte Backups</Text>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, marginBottom: 16 }}>
+                  <TouchableOpacity
+                    style={[styles.backupBtn, { backgroundColor: theme.primary, flex: 1 }]}
+                    onPress={handleStartExport}
+                  >
+                    <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Backup exportieren</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.backupBtn, { backgroundColor: theme.cardBg, borderColor: theme.border, borderWidth: 1, flex: 1 }]}
+                    onPress={handleStartImport}
+                  >
+                    <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 14 }}>Backup importieren</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.sectionHeader, { color: theme.primary }]}>🛡️ Passwort-Sicherheits-Check</Text>
+                <View style={[styles.auditContainer, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+                  <View style={styles.auditItem}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.auditTitle, { color: theme.text }]}>Gesamteinträge</Text>
+                      <Text style={[styles.auditSub, { color: theme.subtext }]}>Gespeicherte Tresor-Einträge</Text>
+                    </View>
+                    <View style={styles.auditRightWrapper}>
+                      <View style={[styles.auditBadge, { backgroundColor: theme.inputBg }]}>
+                        <Text style={[styles.auditBadgeText, { color: theme.text }]}>{passwords.length}</Text>
+                      </View>
+                      <View style={styles.arrowPlaceholder} />
+                    </View>
+                  </View>
+
+                  <TouchableOpacity 
+                    style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]}
+                    onPress={() => jumpToFilter('WEAK')}
+                    disabled={weakCount === 0}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.auditTitle, { color: theme.text }]}>Schwache Passwörter</Text>
+                      <Text style={[styles.auditSub, { color: theme.subtext }]}>Weniger als 8 Zeichen</Text>
+                    </View>
+                    <View style={styles.auditRightWrapper}>
+                      <View style={[styles.auditBadge, { backgroundColor: weakCount > 0 ? '#FEE2E2' : '#D1FAE5' }]}>
+                        <Text style={[styles.auditBadgeText, { color: weakCount > 0 ? '#EF4444' : '#10B981' }]}>
+                          {weakCount} {weakCount > 0 ? '⚠️' : '✅'}
+                        </Text>
+                      </View>
+                      {weakCount > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]}
+                    onPress={() => jumpToFilter('DUPLICATES')}
+                    disabled={duplicateList.length === 0}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.auditTitle, { color: theme.text }]}>Doppelte Passwörter</Text>
+                      <Text style={[styles.auditSub, { color: theme.subtext }]}>Mehrfach verwendete Codes</Text>
+                    </View>
+                    <View style={styles.auditRightWrapper}>
+                      <View style={[styles.auditBadge, { backgroundColor: duplicateList.length > 0 ? '#FFEDD5' : '#D1FAE5' }]}>
+                        <Text style={[styles.auditBadgeText, { color: duplicateList.length > 0 ? '#F97316' : '#10B981' }]}>
+                          {duplicateList.length} {duplicateList.length > 0 ? '⚠️' : '✅'}
+                        </Text>
+                      </View>
+                      {duplicateList.length > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]}
+                    onPress={() => jumpToFilter('OLD')}
+                    disabled={oldPasswordCount === 0}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.auditTitle, { color: theme.text }]}>Älter als 1 Jahr</Text>
+                      <Text style={[styles.auditSub, { color: theme.subtext }]}>Lange nicht geändert</Text>
+                    </View>
+                    <View style={styles.auditRightWrapper}>
+                      <View style={[styles.auditBadge, { backgroundColor: oldPasswordCount > 0 ? '#FEF3C7' : '#D1FAE5' }]}>
+                        <Text style={[styles.auditBadgeText, { color: oldPasswordCount > 0 ? '#D97706' : '#10B981' }]}>
+                          {oldPasswordCount} {oldPasswordCount > 0 ? '⚠️' : '✅'}
+                        </Text>
+                      </View>
+                      {oldPasswordCount > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* TAB 2: Generator Optionen */}
+            {settingsTab === 'generator' && (
+              <View>
+                <Text style={[styles.sectionHeader, { color: theme.primary, marginTop: 0 }]}>🔑 Passwort-Generator Optionen</Text>
+
+                <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
+                  <Text style={[styles.settingText, { color: theme.text }]}>Zeichenlänge</Text>
+                  <TextInput
+                    style={[styles.numberInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
+                    value={genLength}
+                    onChangeText={setGenLength}
+                    keyboardType="numeric"
+                    maxLength={2}
+                  />
+                </View>
+
+                <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
+                  <Text style={[styles.settingText, { color: theme.text }]}>Sonderzeichen einschließen (!@#...)</Text>
+                  <Switch value={useSymbols} onValueChange={setUseSymbols} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
+                </View>
+
+                <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
+                  <Text style={[styles.settingText, { color: theme.text }]}>Zahlen einschließen (0-9)</Text>
+                  <Switch value={useNumbers} onValueChange={setUseNumbers} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
+                </View>
+
+                <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
+                  <Text style={[styles.settingText, { color: theme.text }]}>Großbuchstaben (A-Z)</Text>
+                  <Switch value={useUppercase} onValueChange={setUseUppercase} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
+                </View>
+              </View>
+            )}
+
+            {/* TAB 3: Allgemein & Infos */}
+            {settingsTab === 'general' && (
+              <View>
+                <View style={[styles.settingRow, { borderBottomColor: theme.border, marginTop: 0 }]}>
+                  <Text style={[styles.settingText, { color: theme.text }]}>Dunkelmodus</Text>
+                  <Switch value={isDarkMode} onValueChange={setIsDarkMode} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.settingRow, { borderBottomColor: theme.border }]}
+                  onPress={() => setIsGuideOpen(true)}
+                >
+                  <Text style={[styles.settingText, { color: theme.text }]}>📖 Benutzerhandbuch</Text>
+                  <Text style={{ color: theme.subtext }}>›</Text>
+                </TouchableOpacity>
+
+                <View style={[styles.devSection, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+                  <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.5.0 (Tabs & Biometric Actions)</Text>
+                </View>
+              </View>
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -954,19 +1032,19 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Sicherheit & Biometrische Anmeldung</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Biometrischer Rundum-Schutz</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Beim Start der App und beim Aufdecken von Passwörtern schützt dich die biometrische Authentifizierung (Face ID / Fingerabdruck), damit sensible Daten sicher bleiben.
+              Nicht nur das Anzeigen von Passwörtern, sondern auch das Kopieren von Zugangsdaten, das Bearbeiten sowie das Hinzufügen neuer Einträge erfordert jetzt eine biometrische Bestätigung.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Auto-Lock Timer</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Strukturierte Einstellungen</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Die App sperrt sich nach Ablauf des in den Einstellungen festgelegten Zeitraums bei Inaktivität automatisch.
+              Das Einstellungsmenü ist übersichtlich in Tabs unterteilt: „Sicherheit & Audit“, „Generator“ und „Allgemein“.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Verschlüsselte Backups</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Android Zurück-Taste</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Deine exportierten Backups werden mit einer sicheren Verschlüsselung und einem von dir gewählten Passwort geschützt. Nur mit diesem Passwort kann die Datei wiederhergestellt werden.
+              Die Zurück-Taste auf Android schließt offene Menüs und Modals zuverlässig und intuitiv.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -1043,6 +1121,20 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 6
+  },
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    elevation: 2
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center'
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: 'bold'
   },
   searchFilterContainer: {
     paddingHorizontal: 16,
