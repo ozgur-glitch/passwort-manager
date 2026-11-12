@@ -29,8 +29,24 @@ export default function App() {
 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [passwords, setPasswords] = useState([
-    { id: '1', title: 'E-Mail Account', username: 'max.mustermann@example.com', password: 'Password123!', link: 'https://mail.example.com', lastChanged: '14.11.2026' },
-    { id: '2', title: 'GitHub', username: 'dev-user', password: '123', link: 'https://github.com', lastChanged: '01.01.2023' }
+    { 
+      id: '1', 
+      title: 'E-Mail Account', 
+      username: 'max.mustermann@example.com', 
+      password: 'Password123!', 
+      link: 'https://mail.example.com', 
+      lastChanged: '14.11.2026',
+      subTasks: [{ id: 's1', name: 'Wiederherstellungs-PIN', note: '1234' }]
+    },
+    { 
+      id: '2', 
+      title: 'GitHub', 
+      username: 'dev-user', 
+      password: '123', 
+      link: 'https://github.com', 
+      lastChanged: '01.01.2023',
+      subTasks: []
+    }
   ]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,7 +58,6 @@ export default function App() {
   const [useNumbers, setUseNumbers] = useState(true);
   const [useUppercase, setUseUppercase] = useState(true);
 
-  // Settings Tab State ('security' | 'generator' | 'general')
   const [settingsTab, setSettingsTab] = useState('security');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -55,37 +70,31 @@ export default function App() {
   const [backupActionType, setBackupActionType] = useState(null);
   const [pendingImportUri, setPendingImportUri] = useState(null);
 
+  // Edit / Add States & Ref für automatisches Springen zwischen Feldern
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [link, setLink] = useState('');
   const [lastChangedInput, setLastChangedInput] = useState('');
+  const [subTasks, setSubTasks] = useState([]); // [{id, name, note}]
+
+  // Eingabefeld-Refs für Enter/Next Navigation
+  const usernameRef = useRef(null);
+  const linkRef = useRef(null);
+  const dateRef = useRef(null);
+  const passwordRef = useRef(null);
 
   const theme = isDarkMode ? darkTheme : lightTheme;
 
-  // Android Zurück-Taste Handler
   useEffect(() => {
     const backAction = () => {
-      if (isGuideOpen) {
-        setIsGuideOpen(false);
-        return true;
-      }
-      if (isSettingsOpen) {
-        setIsSettingsOpen(false);
-        return true;
-      }
-      if (isModalOpen) {
-        setIsModalOpen(false);
-        return true;
-      }
-      if (isBackupModalOpen) {
-        setIsBackupModalOpen(false);
-        return true;
-      }
+      if (isGuideOpen) { setIsGuideOpen(false); return true; }
+      if (isSettingsOpen) { setIsSettingsOpen(false); return true; }
+      if (isModalOpen) { setIsModalOpen(false); return true; }
+      if (isBackupModalOpen) { setIsBackupModalOpen(false); return true; }
       return false;
     };
-
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, [isGuideOpen, isSettingsOpen, isModalOpen, isBackupModalOpen]);
@@ -94,16 +103,12 @@ export default function App() {
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-
-      if (!hasHardware || !isEnrolled) {
-        return true; // Direkt erlauben, wenn keine Biometrie verfügbar
-      }
+      if (!hasHardware || !isEnrolled) return true;
 
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: promptMessage,
         fallbackLabel: 'PIN verwenden',
       });
-
       return result.success;
     } catch (error) {
       return false;
@@ -113,74 +118,39 @@ export default function App() {
   useEffect(() => {
     (async () => {
       const success = await authenticateWithBiometrics('Tresor entsperren');
-      if (success) {
-        setIsLocked(false);
-      }
+      if (success) setIsLocked(false);
     })();
   }, []);
 
-  // Biometrisch geschütztes Kopieren
-  const handleSecureCopy = async (text, label) => {
-    const success = await authenticateWithBiometrics(`Identität bestätigen, um ${label} zu kopieren`);
-    if (success) {
-      resetInactivityTimer();
-      Clipboard.setString(text);
-      Alert.alert('Kopiert!', `${label} wurde in die Zwischenablage kopiert.`);
-    } else {
-      Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
-    }
-  };
+  // Biometrie NUR beim Aufklappen eines Eintrags verlangen
+  const toggleExpand = async (id) => {
+    resetInactivityTimer();
+    const isCurrentlyExpanded = !!expandedIds[id];
 
-  // Biometrisch geschütztes Bearbeiten
-  const handleSecureEdit = async (item) => {
-    const success = await authenticateWithBiometrics('Identität bestätigen, um Eintrag zu bearbeiten');
-    if (success) {
-      resetInactivityTimer();
-      setEditingId(item.id);
-      setTitle(item.title);
-      setUsername(item.username);
-      setPassword(item.password);
-      setLink(item.link || '');
-      setLastChangedInput(item.lastChanged ? item.lastChanged.replace(/\./g, '') : '');
-      setIsModalOpen(true);
-    } else {
-      Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
-    }
-  };
-
-  const handleRevealPassword = async (itemId) => {
-    if (showPasswordId === itemId) {
-      setShowPasswordId(null);
-      return;
+    if (!isCurrentlyExpanded) {
+      const success = await authenticateWithBiometrics('Identität bestätigen, um Eintrag aufzuklappen');
+      if (!success) {
+        Alert.alert('Abgebrochen', 'Biometrische Authentifizierung erforderlich.');
+        return;
+      }
     }
 
-    const success = await authenticateWithBiometrics('Identität bestätigen, um Passwort anzuzeigen');
-    if (success) {
-      setShowPasswordId(itemId);
-    } else {
-      Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
-    }
+    setExpandedIds(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
   };
 
   const resetInactivityTimer = () => {
     if (isLocked) return;
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current);
-    }
-
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     const mins = parseFloat(autoLockMinutes) || 5;
-    const timeoutMs = mins * 60 * 1000;
-
-    inactivityTimerRef.current = setTimeout(() => {
-      setIsLocked(true);
-    }, timeoutMs);
+    inactivityTimerRef.current = setTimeout(() => setIsLocked(true), mins * 60 * 1000);
   };
 
   useEffect(() => {
     resetInactivityTimer();
-    return () => {
-      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-    };
+    return () => { if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current); };
   }, [isLocked, autoLockMinutes]);
 
   const handleStartExport = () => {
@@ -197,7 +167,6 @@ export default function App() {
         type: ['application/json', '*/*'],
         copyToCacheDirectory: true,
       });
-
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setPendingImportUri(result.assets[0].uri);
         setBackupPassword('');
@@ -210,10 +179,7 @@ export default function App() {
   };
 
   const deriveKey = async (password) => {
-    return await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      password
-    );
+    return await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, password);
   };
 
   const executeEncryptedExport = async () => {
@@ -221,7 +187,6 @@ export default function App() {
       Alert.alert('Fehler', 'Bitte gib ein Passwort für das Backup ein.');
       return;
     }
-
     try {
       const rawData = JSON.stringify({ passwords, autoLockMinutes, isDarkMode }, null, 2);
       const keyHash = await deriveKey(backupPassword);
@@ -234,11 +199,7 @@ export default function App() {
       if (Platform.OS === 'android') {
         const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
         if (permissions.granted) {
-          const uri = await FileSystem.StorageAccessFramework.createFileAsync(
-            permissions.directoryUri,
-            fileName,
-            'application/json'
-          );
+          const uri = await FileSystem.StorageAccessFramework.createFileAsync(permissions.directoryUri, fileName, 'application/json');
           await FileSystem.writeAsStringAsync(uri, encodedData, { encoding: FileSystem.EncodingType.UTF8 });
           setIsBackupModalOpen(false);
           Alert.alert('Erfolg', 'Backup erfolgreich gespeichert.');
@@ -259,24 +220,19 @@ export default function App() {
       Alert.alert('Fehler', 'Bitte gib das Passwort ein.');
       return;
     }
-
     try {
       const fileContent = await FileSystem.readAsStringAsync(pendingImportUri);
       const decodedString = decodeURIComponent(escape(atob(fileContent)));
       const parsedPayload = JSON.parse(decodedString);
 
       const enteredKeyHash = await deriveKey(backupPassword);
-      if (parsedPayload.keyHash !== enteredKeyHash) {
-        throw new Error('Falsches Passwort.');
-      }
+      if (parsedPayload.keyHash !== enteredKeyHash) throw new Error('Falsches Passwort.');
 
       const parsedData = JSON.parse(parsedPayload.data);
-
       if (parsedData && Array.isArray(parsedData.passwords)) {
         setPasswords(parsedData.passwords);
         if (parsedData.autoLockMinutes) setAutoLockMinutes(parsedData.autoLockMinutes);
         if (typeof parsedData.isDarkMode === 'boolean') setIsDarkMode(parsedData.isDarkMode);
-        
         setIsBackupModalOpen(false);
         Alert.alert('Erfolg', 'Backup erfolgreich wiederhergestellt!');
       } else {
@@ -297,21 +253,13 @@ export default function App() {
     if (/[A-Z]/.test(pwd)) score += 15;
     if (/[0-9]/.test(pwd)) score += 15;
     if (/[^A-Za-z0-9]/.test(pwd)) score += 20;
-
     if (score > 100) score = 100;
 
     let label = 'Schwach';
     let color = '#EF4444';
-    if (score >= 40 && score < 70) {
-      label = 'Mittel';
-      color = '#F59E0B';
-    } else if (score >= 70 && score < 100) {
-      label = 'Stark';
-      color = '#3B82F6';
-    } else if (score === 100) {
-      label = 'Sehr sicher';
-      color = '#10B981';
-    }
+    if (score >= 40 && score < 70) { label = 'Mittel'; color = '#F59E0B'; }
+    else if (score >= 70 && score < 100) { label = 'Stark'; color = '#3B82F6'; }
+    else if (score === 100) { label = 'Sehr sicher'; color = '#10B981'; }
 
     return { score, label, color };
   };
@@ -324,41 +272,20 @@ export default function App() {
     const month = parseInt(parts[1], 10) - 1;
     const year = parseInt(parts[2], 10);
     const lastDate = new Date(year, month, day);
-    const now = new Date();
-    const diffTime = now - lastDate;
-    const diffDays = diffTime / (1000 * 60 * 60 * 24);
-    return diffDays > 365;
+    const diffTime = new Date() - lastDate;
+    return diffTime / (1000 * 60 * 60 * 24) > 365;
   };
 
   const formatDateString = (input) => {
     const cleaned = input.replace(/\D/g, '');
     if (cleaned.length === 8) {
-      const day = cleaned.substring(0, 2);
-      const month = cleaned.substring(2, 4);
-      const year = cleaned.substring(4, 8);
-      return `${day}.${month}.${year}`;
+      return `${cleaned.substring(0, 2)}.${cleaned.substring(2, 4)}.${cleaned.substring(4, 8)}`;
     }
     const today = new Date();
-    const d = String(today.getDate()).padStart(2, '0');
-    const m = String(today.getMonth() + 1).padStart(2, '0');
-    const y = today.getFullYear();
-    return `${d}.${m}.${y}`;
+    return `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
   };
 
-  const toggleExpand = (id) => {
-    resetInactivityTimer();
-    setExpandedIds(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
-  };
-
-  const handleOpenAddModal = async () => {
-    const success = await authenticateWithBiometrics('Identität bestätigen, um neuen Eintrag hinzuzufügen');
-    if (!success) {
-      Alert.alert('Abgebrochen', 'Authentifizierung erforderlich.');
-      return;
-    }
+  const handleOpenAddModal = () => {
     resetInactivityTimer();
     setEditingId(null);
     setTitle('');
@@ -366,6 +293,19 @@ export default function App() {
     setPassword('');
     setLink('');
     setLastChangedInput('');
+    setSubTasks([]);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (item) => {
+    resetInactivityTimer();
+    setEditingId(item.id);
+    setTitle(item.title);
+    setUsername(item.username);
+    setPassword(item.password);
+    setLink(item.link || '');
+    setLastChangedInput(item.lastChanged ? item.lastChanged.replace(/\./g, '') : '');
+    setSubTasks(item.subTasks ? [...item.subTasks] : []);
     setIsModalOpen(true);
   };
 
@@ -377,13 +317,14 @@ export default function App() {
     }
 
     const formattedDate = formatDateString(lastChangedInput);
+    let updatedList = [...passwords];
 
     if (editingId) {
-      setPasswords(passwords.map(item => 
+      updatedList = updatedList.map(item => 
         item.id === editingId 
-          ? { ...item, title, username, password, link, lastChanged: formattedDate } 
+          ? { ...item, title, username, password, link, lastChanged: formattedDate, subTasks } 
           : item
-      ));
+      );
     } else {
       const newEntry = {
         id: Date.now().toString(),
@@ -391,14 +332,20 @@ export default function App() {
         username,
         password,
         link,
-        lastChanged: formattedDate
+        lastChanged: formattedDate,
+        subTasks
       };
-      setPasswords([newEntry, ...passwords]);
+      updatedList.push(newEntry);
     }
 
+    // Alphabetisch aufsteigend sortieren nach Titel
+    updatedList.sort((a, b) => a.title.localeCompare(b.title, 'de', { sensitivity: 'base' }));
+
+    setPasswords(updatedList);
     setIsModalOpen(false);
   };
 
+  // Biometrie NUR beim Löschen eines Eintrags
   const handleDeletePassword = async (id) => {
     const success = await authenticateWithBiometrics('Identität bestätigen, um Eintrag zu löschen');
     if (!success) {
@@ -424,16 +371,31 @@ export default function App() {
     setPassword(result);
   };
 
+  const copyToClipboard = (text, label) => {
+    resetInactivityTimer();
+    Clipboard.setString(text);
+    Alert.alert('Kopiert!', `${label} wurde in die Zwischenablage kopiert.`);
+  };
+
   const openLink = (url) => {
     resetInactivityTimer();
     if (!url) return;
     let formattedUrl = url;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      formattedUrl = 'https://' + url;
-    }
-    Linking.openURL(formattedUrl).catch(() => {
-      Alert.alert('Fehler', 'Der Link konnte nicht geöffnet werden.');
-    });
+    if (!url.startsWith('http://') && !url.startsWith('https://')) formattedUrl = 'https://' + url;
+    Linking.openURL(formattedUrl).catch(() => Alert.alert('Fehler', 'Der Link konnte nicht geöffnet werden.'));
+  };
+
+  const addSubTaskField = () => {
+    resetInactivityTimer();
+    setSubTasks([...subTasks, { id: Date.now().toString(), name: '', note: '' }]);
+  };
+
+  const updateSubTask = (id, field, value) => {
+    setSubTasks(subTasks.map(st => st.id === id ? { ...st, [field]: value } : st));
+  };
+
+  const removeSubTask = (id) => {
+    setSubTasks(subTasks.filter(st => st.id !== id));
   };
 
   const getDuplicatePasswords = () => {
@@ -452,11 +414,9 @@ export default function App() {
       (item.username && item.username.toLowerCase().includes(searchQuery.toLowerCase()));
 
     if (!matchesSearch) return false;
-
     if (activeAuditFilter === 'WEAK') return isPasswordWeak(item.password);
     if (activeAuditFilter === 'DUPLICATES') return duplicateList.includes(item.password);
     if (activeAuditFilter === 'OLD') return isPasswordOlderThanOneYear(item.lastChanged);
-
     return true;
   });
 
@@ -533,9 +493,7 @@ export default function App() {
 
         {activeAuditFilter && (
           <View style={styles.filterBanner}>
-            <Text style={styles.filterBannerText}>
-              Filter: {getFilterBannerText()}
-            </Text>
+            <Text style={styles.filterBannerText}>Filter: {getFilterBannerText()}</Text>
             <TouchableOpacity onPress={() => setActiveAuditFilter(null)}>
               <Text style={{ color: theme.primary, fontWeight: 'bold', fontSize: 12 }}>Filter zurücksetzen ✖</Text>
             </TouchableOpacity>
@@ -543,7 +501,7 @@ export default function App() {
         )}
       </View>
 
-      {/* Main List */}
+      {/* Main List (Alphabetisch sortiert) */}
       <FlatList
         data={filteredPasswords}
         keyExtractor={(item) => item.id}
@@ -582,7 +540,7 @@ export default function App() {
                   </View>
 
                   <View style={styles.cardActionsTop}>
-                    <TouchableOpacity onPress={() => handleSecureEdit(item)} style={[styles.actionIconBtn, { backgroundColor: theme.actionBg }]}>
+                    <TouchableOpacity onPress={() => handleOpenEditModal(item)} style={[styles.actionIconBtn, { backgroundColor: theme.actionBg }]}>
                       <Text style={{ fontSize: 14 }}>✏️</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => handleDeletePassword(item.id)} style={[styles.actionIconBtn, { backgroundColor: theme.dangerBg }]}>
@@ -592,6 +550,7 @@ export default function App() {
                   </View>
                 </View>
 
+                {/* Aufgeklappter Zustand (erfordert Biometrie) */}
                 {isExpanded && (
                   <View style={{ marginTop: 6 }}>
                     {item.username ? (
@@ -600,7 +559,7 @@ export default function App() {
                           <Text style={[styles.infoLabel, { color: theme.subtext }]}>Benutzername</Text>
                           <Text style={[styles.infoValue, { color: theme.text }]} numberOfLines={1}>{item.username}</Text>
                         </View>
-                        <TouchableOpacity style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} onPress={() => handleSecureCopy(item.username, 'Benutzername')}>
+                        <TouchableOpacity style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} onPress={() => copyToClipboard(item.username, 'Benutzername')}>
                           <Text style={[styles.miniBtnText, { color: theme.primary }]}>Kopieren</Text>
                         </TouchableOpacity>
                       </View>
@@ -633,7 +592,7 @@ export default function App() {
                       </View>
                     ) : null}
 
-                    <View style={[styles.infoRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                    <View style={styles.infoRow}>
                       <View style={{ flex: 1, marginRight: 8 }}>
                         <Text style={[styles.infoLabel, { color: theme.subtext }]}>Passwort</Text>
                         <Text style={[styles.infoValue, { color: theme.text, fontWeight: 'bold' }]} numberOfLines={1}>
@@ -643,17 +602,30 @@ export default function App() {
                       <View style={{ flexDirection: 'row', gap: 6 }}>
                         <TouchableOpacity 
                           style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} 
-                          onPress={() => handleRevealPassword(item.id)}
+                          onPress={() => setShowPasswordId(showPasswordId === item.id ? null : item.id)}
                         >
                           <Text style={[styles.miniBtnText, { color: theme.primary }]}>
                             {showPasswordId === item.id ? 'Verbergen' : 'Anzeigen'}
                           </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} onPress={() => handleSecureCopy(item.password, 'Passwort')}>
+                        <TouchableOpacity style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} onPress={() => copyToClipboard(item.password, 'Passwort')}>
                           <Text style={[styles.miniBtnText, { color: theme.primary }]}>Kopieren</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
+
+                    {/* Anzeige von Unteraufgaben / Zusatzfeldern */}
+                    {item.subTasks && item.subTasks.length > 0 && (
+                      <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 6 }}>
+                        <Text style={[styles.infoLabel, { color: theme.primary, marginBottom: 4 }]}>Unteraufgaben / Zusatzinfos:</Text>
+                        {item.subTasks.map(st => (
+                          <View key={st.id} style={[styles.subTaskDisplayCard, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+                            <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme.text }}>{st.name || 'Unbenannt'}</Text>
+                            {st.note ? <Text style={{ fontSize: 12, color: theme.subtext, marginTop: 2 }}>{st.note}</Text> : null}
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
@@ -661,9 +633,7 @@ export default function App() {
           );
         }}
         ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: theme.subtext }]}>
-            Keine passenden Einträge gefunden.
-          </Text>
+          <Text style={[styles.emptyText, { color: theme.subtext }]}>Keine passenden Einträge gefunden.</Text>
         }
       />
 
@@ -699,123 +669,149 @@ export default function App() {
             />
 
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: theme.border }]}
-                onPress={() => setIsBackupModalOpen(false)}
-              >
+              <TouchableOpacity style={[styles.btn, { backgroundColor: theme.border }]} onPress={() => setIsBackupModalOpen(false)}>
                 <Text style={[styles.btnText, { color: theme.text }]}>Abbrechen</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: theme.primary }]}
-                onPress={backupActionType === 'export' ? executeEncryptedExport : executeEncryptedImport}
-              >
-                <Text style={[styles.btnText, { color: '#FFF' }]}>
-                  {backupActionType === 'export' ? 'Exportieren' : 'Wiederherstellen'}
-                </Text>
+              <TouchableOpacity style={[styles.btn, { backgroundColor: theme.primary }]} onPress={backupActionType === 'export' ? executeEncryptedExport : executeEncryptedImport}>
+                <Text style={[styles.btnText, { color: '#FFF' }]}>{backupActionType === 'export' ? 'Exportieren' : 'Wiederherstellen'}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Add / Edit Password Modal */}
+      {/* Add / Edit Password Modal mit Unteraufgaben & automatischer Enter-Loop */}
       <Modal visible={isModalOpen} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.cardBg }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.cardBg, maxHeight: '90%' }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>
               {editingId ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}
             </Text>
 
-            <TextInput
-              placeholder="Titel (z. B. Netflix)"
-              placeholderTextColor={theme.subtext}
-              style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
-              value={title}
-              onChangeText={setTitle}
-            />
-
-            <TextInput
-              placeholder="Benutzername / E-Mail"
-              placeholderTextColor={theme.subtext}
-              style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-            />
-
-            <TextInput
-              placeholder="Web-Link (z. B. netflix.com)"
-              placeholderTextColor={theme.subtext}
-              style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
-              value={link}
-              onChangeText={setLink}
-              autoCapitalize="none"
-            />
-
-            <TextInput
-              placeholder="Letzte Änderung (TTMMJJJJ, z.B. 14112026)"
-              placeholderTextColor={theme.subtext}
-              style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
-              value={lastChangedInput}
-              onChangeText={setLastChangedInput}
-              keyboardType="numeric"
-              maxLength={8}
-            />
-
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+            <ScrollView showsVerticalScrollIndicator={false}>
               <TextInput
-                placeholder="Passwort"
+                placeholder="Titel (z. B. Netflix) *"
                 placeholderTextColor={theme.subtext}
-                style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg, flex: 1, marginBottom: 0 }]}
-                value={password}
-                onChangeText={setPassword}
+                style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
+                value={title}
+                onChangeText={setTitle}
+                returnKeyType="next"
+                onSubmitEditing={() => usernameRef.current?.focus()}
+                blurOnSubmit={false}
               />
-              <TouchableOpacity
-                style={[styles.btnGen, { backgroundColor: theme.primary }]}
-                onPress={generateRandomPassword}
-              >
-                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Generieren</Text>
-              </TouchableOpacity>
-            </View>
 
-            <View style={styles.strengthContainer}>
-              <View style={styles.strengthHeaderRow}>
-                <Text style={[styles.strengthLabelTitle, { color: theme.subtext }]}>Sicherheit:</Text>
-                <Text style={[styles.strengthLabelText, { color: strengthInfo.color }]}>
-                  {strengthInfo.label} ({strengthInfo.score}%)
-                </Text>
-              </View>
-              <View style={[styles.strengthBarBg, { backgroundColor: theme.border }]}>
-                <View 
-                  style={[
-                    styles.strengthBarFill, 
-                    { width: `${strengthInfo.score}%`, backgroundColor: strengthInfo.color }
-                  ]} 
+              <TextInput
+                ref={usernameRef}
+                placeholder="Benutzername / E-Mail"
+                placeholderTextColor={theme.subtext}
+                style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                returnKeyType="next"
+                onSubmitEditing={() => linkRef.current?.focus()}
+                blurOnSubmit={false}
+              />
+
+              <TextInput
+                ref={linkRef}
+                placeholder="Web-Link (z. B. netflix.com)"
+                placeholderTextColor={theme.subtext}
+                style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
+                value={link}
+                onChangeText={setLink}
+                autoCapitalize="none"
+                returnKeyType="next"
+                onSubmitEditing={() => dateRef.current?.focus()}
+                blurOnSubmit={false}
+              />
+
+              <TextInput
+                ref={dateRef}
+                placeholder="Letzte Änderung (TTMMJJJJ)"
+                placeholderTextColor={theme.subtext}
+                style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
+                value={lastChangedInput}
+                onChangeText={setLastChangedInput}
+                keyboardType="numeric"
+                maxLength={8}
+                returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                blurOnSubmit={false}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                <TextInput
+                  ref={passwordRef}
+                  placeholder="Passwort *"
+                  placeholderTextColor={theme.subtext}
+                  style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg, flex: 1, marginBottom: 0 }]}
+                  value={password}
+                  onChangeText={setPassword}
                 />
+                <TouchableOpacity style={[styles.btnGen, { backgroundColor: theme.primary }]} onPress={generateRandomPassword}>
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Generieren</Text>
+                </TouchableOpacity>
               </View>
-            </View>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: theme.border }]}
-                onPress={() => setIsModalOpen(false)}
-              >
-                <Text style={[styles.btnText, { color: theme.text }]}>Abbrechen</Text>
-              </TouchableOpacity>
+              <View style={styles.strengthContainer}>
+                <View style={styles.strengthHeaderRow}>
+                  <Text style={[styles.strengthLabelTitle, { color: theme.subtext }]}>Sicherheit:</Text>
+                  <Text style={[styles.strengthLabelText, { color: strengthInfo.color }]}>
+                    {strengthInfo.label} ({strengthInfo.score}%)
+                  </Text>
+                </View>
+                <View style={[styles.strengthBarBg, { backgroundColor: theme.border }]}>
+                  <View style={[styles.strengthBarFill, { width: `${strengthInfo.score}%`, backgroundColor: strengthInfo.color }]} />
+                </View>
+              </View>
 
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: theme.primary }]}
-                onPress={handleSavePassword}
-              >
-                <Text style={[styles.btnText, { color: '#FFF' }]}>Speichern</Text>
-              </TouchableOpacity>
-            </View>
+              {/* Unteraufgaben Sektion */}
+              <View style={{ marginTop: 12, marginBottom: 16 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text style={[styles.settingText, { color: theme.text, fontWeight: 'bold', fontSize: 14 }]}>Unteraufgaben / Zusatzfelder</Text>
+                  <TouchableOpacity style={[styles.miniBtn, { backgroundColor: theme.primaryLight }]} onPress={addSubTaskField}>
+                    <Text style={[styles.miniBtnText, { color: theme.primary }]}>+ Hinzufügen</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {subTasks.map((st) => (
+                  <View key={st.id} style={[styles.subTaskContainer, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+                    <TextInput
+                      placeholder="Name der Unteraufgabe (z.B. PIN)"
+                      placeholderTextColor={theme.subtext}
+                      style={[styles.subTaskInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.cardBg }]}
+                      value={st.name}
+                      onChangeText={(val) => updateSubTask(st.id, 'name', val)}
+                    />
+                    <TextInput
+                      placeholder="Notiz / Inhalt"
+                      placeholderTextColor={theme.subtext}
+                      style={[styles.subTaskInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.cardBg, marginTop: 6 }]}
+                      value={st.note}
+                      onChangeText={(val) => updateSubTask(st.id, 'note', val)}
+                    />
+                    <TouchableOpacity onPress={() => removeSubTask(st.id)} style={{ alignSelf: 'flex-end', marginTop: 4 }}>
+                      <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: 'bold' }}>Entfernen ✖</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={[styles.btn, { backgroundColor: theme.border }]} onPress={() => setIsModalOpen(false)}>
+                  <Text style={[styles.btnText, { color: theme.text }]}>Abbrechen</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.btn, { backgroundColor: theme.primary }]} onPress={handleSavePassword}>
+                  <Text style={[styles.btnText, { color: '#FFF' }]}>Speichern</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Settings Modal (mit Tabs für perfekte Übersicht) */}
+      {/* Settings Modal (Tabs) */}
       <Modal visible={isSettingsOpen} animationType="slide">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -827,30 +823,19 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          {/* Settings Tab Bar */}
           <View style={[styles.tabBar, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-            <TouchableOpacity 
-              style={[styles.tabItem, settingsTab === 'security' && { borderBottomColor: theme.primary, borderBottomWidth: 3 }]}
-              onPress={() => setSettingsTab('security')}
-            >
+            <TouchableOpacity style={[styles.tabItem, settingsTab === 'security' && { borderBottomColor: theme.primary, borderBottomWidth: 3 }]} onPress={() => setSettingsTab('security')}>
               <Text style={[styles.tabText, { color: settingsTab === 'security' ? theme.primary : theme.subtext }]}>Sicherheit & Audit</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.tabItem, settingsTab === 'generator' && { borderBottomColor: theme.primary, borderBottomWidth: 3 }]}
-              onPress={() => setSettingsTab('generator')}
-            >
+            <TouchableOpacity style={[styles.tabItem, settingsTab === 'generator' && { borderBottomColor: theme.primary, borderBottomWidth: 3 }]} onPress={() => setSettingsTab('generator')}>
               <Text style={[styles.tabText, { color: settingsTab === 'generator' ? theme.primary : theme.subtext }]}>Generator</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.tabItem, settingsTab === 'general' && { borderBottomColor: theme.primary, borderBottomWidth: 3 }]}
-              onPress={() => setSettingsTab('general')}
-            >
+            <TouchableOpacity style={[styles.tabItem, settingsTab === 'general' && { borderBottomColor: theme.primary, borderBottomWidth: 3 }]} onPress={() => setSettingsTab('general')}>
               <Text style={[styles.tabText, { color: settingsTab === 'general' ? theme.primary : theme.subtext }]}>Allgemein</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            {/* TAB 1: Sicherheit, Backup & Audit */}
             {settingsTab === 'security' && (
               <View>
                 <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
@@ -869,16 +854,10 @@ export default function App() {
 
                 <Text style={[styles.sectionHeader, { color: theme.primary }]}>💾 Verschlüsselte Backups</Text>
                 <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, marginBottom: 16 }}>
-                  <TouchableOpacity
-                    style={[styles.backupBtn, { backgroundColor: theme.primary, flex: 1 }]}
-                    onPress={handleStartExport}
-                  >
+                  <TouchableOpacity style={[styles.backupBtn, { backgroundColor: theme.primary, flex: 1 }]} onPress={handleStartExport}>
                     <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }}>Backup exportieren</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.backupBtn, { backgroundColor: theme.cardBg, borderColor: theme.border, borderWidth: 1, flex: 1 }]}
-                    onPress={handleStartImport}
-                  >
+                  <TouchableOpacity style={[styles.backupBtn, { backgroundColor: theme.cardBg, borderColor: theme.border, borderWidth: 1, flex: 1 }]} onPress={handleStartImport}>
                     <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 14 }}>Backup importieren</Text>
                   </TouchableOpacity>
                 </View>
@@ -898,58 +877,40 @@ export default function App() {
                     </View>
                   </View>
 
-                  <TouchableOpacity 
-                    style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]}
-                    onPress={() => jumpToFilter('WEAK')}
-                    disabled={weakCount === 0}
-                  >
+                  <TouchableOpacity style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]} onPress={() => jumpToFilter('WEAK')} disabled={weakCount === 0}>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.auditTitle, { color: theme.text }]}>Schwache Passwörter</Text>
                       <Text style={[styles.auditSub, { color: theme.subtext }]}>Weniger als 8 Zeichen</Text>
                     </View>
                     <View style={styles.auditRightWrapper}>
                       <View style={[styles.auditBadge, { backgroundColor: weakCount > 0 ? '#FEE2E2' : '#D1FAE5' }]}>
-                        <Text style={[styles.auditBadgeText, { color: weakCount > 0 ? '#EF4444' : '#10B981' }]}>
-                          {weakCount} {weakCount > 0 ? '⚠️' : '✅'}
-                        </Text>
+                        <Text style={[styles.auditBadgeText, { color: weakCount > 0 ? '#EF4444' : '#10B981' }]}>{weakCount} {weakCount > 0 ? '⚠️' : '✅'}</Text>
                       </View>
                       {weakCount > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
                     </View>
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]}
-                    onPress={() => jumpToFilter('DUPLICATES')}
-                    disabled={duplicateList.length === 0}
-                  >
+                  <TouchableOpacity style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]} onPress={() => jumpToFilter('DUPLICATES')} disabled={duplicateList.length === 0}>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.auditTitle, { color: theme.text }]}>Doppelte Passwörter</Text>
                       <Text style={[styles.auditSub, { color: theme.subtext }]}>Mehrfach verwendete Codes</Text>
                     </View>
                     <View style={styles.auditRightWrapper}>
                       <View style={[styles.auditBadge, { backgroundColor: duplicateList.length > 0 ? '#FFEDD5' : '#D1FAE5' }]}>
-                        <Text style={[styles.auditBadgeText, { color: duplicateList.length > 0 ? '#F97316' : '#10B981' }]}>
-                          {duplicateList.length} {duplicateList.length > 0 ? '⚠️' : '✅'}
-                        </Text>
+                        <Text style={[styles.auditBadgeText, { color: duplicateList.length > 0 ? '#F97316' : '#10B981' }]}>{duplicateList.length} {duplicateList.length > 0 ? '⚠️' : '✅'}</Text>
                       </View>
                       {duplicateList.length > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
                     </View>
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]}
-                    onPress={() => jumpToFilter('OLD')}
-                    disabled={oldPasswordCount === 0}
-                  >
+                  <TouchableOpacity style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]} onPress={() => jumpToFilter('OLD')} disabled={oldPasswordCount === 0}>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.auditTitle, { color: theme.text }]}>Älter als 1 Jahr</Text>
                       <Text style={[styles.auditSub, { color: theme.subtext }]}>Lange nicht geändert</Text>
                     </View>
                     <View style={styles.auditRightWrapper}>
                       <View style={[styles.auditBadge, { backgroundColor: oldPasswordCount > 0 ? '#FEF3C7' : '#D1FAE5' }]}>
-                        <Text style={[styles.auditBadgeText, { color: oldPasswordCount > 0 ? '#D97706' : '#10B981' }]}>
-                          {oldPasswordCount} {oldPasswordCount > 0 ? '⚠️' : '✅'}
-                        </Text>
+                        <Text style={[styles.auditBadgeText, { color: oldPasswordCount > 0 ? '#D97706' : '#10B981' }]}>{oldPasswordCount} {oldPasswordCount > 0 ? '⚠️' : '✅'}</Text>
                       </View>
                       {oldPasswordCount > 0 ? <Text style={[styles.arrowText, { color: theme.primary }]}>›</Text> : <View style={styles.arrowPlaceholder} />}
                     </View>
@@ -958,11 +919,9 @@ export default function App() {
               </View>
             )}
 
-            {/* TAB 2: Generator Optionen */}
             {settingsTab === 'generator' && (
               <View>
                 <Text style={[styles.sectionHeader, { color: theme.primary, marginTop: 0 }]}>🔑 Passwort-Generator Optionen</Text>
-
                 <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
                   <Text style={[styles.settingText, { color: theme.text }]}>Zeichenlänge</Text>
                   <TextInput
@@ -973,17 +932,14 @@ export default function App() {
                     maxLength={2}
                   />
                 </View>
-
                 <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
                   <Text style={[styles.settingText, { color: theme.text }]}>Sonderzeichen einschließen (!@#...)</Text>
                   <Switch value={useSymbols} onValueChange={setUseSymbols} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
                 </View>
-
                 <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
                   <Text style={[styles.settingText, { color: theme.text }]}>Zahlen einschließen (0-9)</Text>
                   <Switch value={useNumbers} onValueChange={setUseNumbers} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
                 </View>
-
                 <View style={[styles.settingRow, { borderBottomColor: theme.border }]}>
                   <Text style={[styles.settingText, { color: theme.text }]}>Großbuchstaben (A-Z)</Text>
                   <Switch value={useUppercase} onValueChange={setUseUppercase} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
@@ -991,7 +947,6 @@ export default function App() {
               </View>
             )}
 
-            {/* TAB 3: Allgemein & Infos */}
             {settingsTab === 'general' && (
               <View>
                 <View style={[styles.settingRow, { borderBottomColor: theme.border, marginTop: 0 }]}>
@@ -999,10 +954,7 @@ export default function App() {
                   <Switch value={isDarkMode} onValueChange={setIsDarkMode} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.settingRow, { borderBottomColor: theme.border }]}
-                  onPress={() => setIsGuideOpen(true)}
-                >
+                <TouchableOpacity style={[styles.settingRow, { borderBottomColor: theme.border }]} onPress={() => setIsGuideOpen(true)}>
                   <Text style={[styles.settingText, { color: theme.text }]}>📖 Benutzerhandbuch</Text>
                   <Text style={{ color: theme.subtext }}>›</Text>
                 </TouchableOpacity>
@@ -1011,7 +963,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.5.0 (Tabs & Biometric Actions)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.6.0 (Unteraufgaben & Sortierung)</Text>
                 </View>
               </View>
             )}
@@ -1019,7 +971,7 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
-      {/* Manual / Guide Modal */}
+      {/* Aktualisiertes Handbuch Modal */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -1032,19 +984,24 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Biometrischer Rundum-Schutz</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Unteraufgaben & Zusatzfelder</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Nicht nur das Anzeigen von Passwörtern, sondern auch das Kopieren von Zugangsdaten, das Bearbeiten sowie das Hinzufügen neuer Einträge erfordert jetzt eine biometrische Bestätigung.
+              Beim Erstellen oder Bearbeiten eines Eintrags kannst du beliebig viele Unteraufgaben hinzufügen (z.B. für Sicherheitsfragen oder PINs). Diese werden beim Aufklappen des Eintrags angezeigt.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Strukturierte Einstellungen</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Biometrischer Schutz & Aktionen</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Das Einstellungsmenü ist übersichtlich in Tabs unterteilt: „Sicherheit & Audit“, „Generator“ und „Allgemein“.
+              Biometrie wird verlangt, wenn du einen Eintrag aufklappst oder löschst. Das Bearbeiten, Anzeigen und Kopieren von Daten ist für eine flüssige Bedienung ohne erneute Biometrie direkt möglich.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Android Zurück-Taste</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Automatische Sortierung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Die Zurück-Taste auf Android schließt offene Menüs und Modals zuverlässig und intuitiv.
+              Alle Einträge im Tresor sortieren sich vollautomatisch alphabetisch aufsteigend nach ihrem Titel.
+            </Text>
+
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>4. Tastatur-Navigation (Enter/Next)</Text>
+            <Text style={[styles.guideText, { color: theme.subtext }]}>
+              In den Eingabefeldern springt der Fokus beim Drücken von „Weiter/Enter“ automatisch zur nächsten Zelle weiter.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -1054,426 +1011,111 @@ export default function App() {
 }
 
 const lightTheme = {
-  bg: '#F1F5F9',
-  headerBg: '#2563EB',
-  cardBg: '#FFFFFF',
-  inputBg: '#F8FAFC',
-  text: '#1E293B',
-  subtext: '#64748B',
-  border: '#E2E8F0',
-  primary: '#2563EB',
-  primaryLight: '#DBEAFE',
-  actionBg: '#F1F5F9',
-  dangerBg: '#FEE2E2'
+  bg: '#F1F5F9', headerBg: '#2563EB', cardBg: '#FFFFFF', inputBg: '#F8FAFC',
+  text: '#1E293B', subtext: '#64748B', border: '#E2E8F0', primary: '#2563EB',
+  primaryLight: '#DBEAFE', actionBg: '#F1F5F9', dangerBg: '#FEE2E2'
 };
 
 const darkTheme = {
-  bg: '#090D16',
-  headerBg: '#1E293B',
-  cardBg: '#111827',
-  inputBg: '#1F2937',
-  text: '#F3F4F6',
-  subtext: '#9CA3AF',
-  border: '#1F2937',
-  primary: '#3B82F6',
-  primaryLight: '#1E3A8A',
-  actionBg: '#1F2937',
-  dangerBg: '#450A0A'
+  bg: '#090D16', headerBg: '#1E293B', cardBg: '#111827', inputBg: '#1F2937',
+  text: '#F3F4F6', subtext: '#9CA3AF', border: '#1F2937', primary: '#3B82F6',
+  primaryLight: '#1E3A8A', actionBg: '#1F2937', dangerBg: '#450A0A'
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1
-  },
+  container: { flex: 1 },
   lockCard: {
-    width: '88%',
-    maxWidth: 380,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 24,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8
+    width: '88%', maxWidth: 380, borderRadius: 20, borderWidth: 1, padding: 24, elevation: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 16,
+    elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 0.5
-  },
-  iconButton: {
-    padding: 6
-  },
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    elevation: 2
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center'
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: 'bold'
-  },
-  searchFilterContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1
-  },
-  searchBarWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 10,
-    fontSize: 14
-  },
-  clearSearchBtn: {
-    padding: 6
-  },
-  filterBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingHorizontal: 4
-  },
-  filterBannerText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#EF4444'
-  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#FFFFFF', letterSpacing: 0.5 },
+  iconButton: { padding: 6 },
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1, elevation: 2 },
+  tabItem: { flex: 1, paddingVertical: 12, alignItems: 'center' },
+  tabText: { fontSize: 13, fontWeight: 'bold' },
+  searchFilterContainer: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  searchBarWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 12 },
+  searchInput: { flex: 1, paddingVertical: 10, fontSize: 14 },
+  clearSearchBtn: { padding: 6 },
+  filterBanner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingHorizontal: 4 },
+  filterBannerText: { fontSize: 12, fontWeight: 'bold', color: '#EF4444' },
   card: {
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 14,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4
+    borderRadius: 14, borderWidth: 1, marginBottom: 14, overflow: 'hidden', flexDirection: 'row',
+    elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4
   },
-  cardAccentBar: {
-    width: 6
-  },
-  cardInner: {
-    flex: 1,
-    padding: 14
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    flex: 1
-  },
-  warningColumn: {
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: 4,
-    marginLeft: 8
-  },
-  warningBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    minWidth: 72,
-    alignItems: 'center'
-  },
-  warningBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    textAlign: 'center'
-  },
-  badgeWeak: {
-    backgroundColor: '#FEE2E2'
-  },
-  badgeTextWeak: {
-    color: '#EF4444'
-  },
-  badgeDuplicate: {
-    backgroundColor: '#FFEDD5'
-  },
-  badgeTextDuplicate: {
-    color: '#F97316'
-  },
-  badgeOld: {
-    backgroundColor: '#FEF3C7'
-  },
-  badgeTextOld: {
-    color: '#D97706'
-  },
-  cardActionsTop: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center'
-  },
-  actionIconBtn: {
-    padding: 6,
-    borderRadius: 8
-  },
+  cardAccentBar: { width: 6 },
+  cardInner: { flex: 1, padding: 14 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
+  warningColumn: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 8 },
+  warningBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, minWidth: 72, alignItems: 'center' },
+  warningBadgeText: { fontSize: 10, fontWeight: 'bold', textAlign: 'center' },
+  badgeWeak: { backgroundColor: '#FEE2E2' },
+  badgeTextWeak: { color: '#EF4444' },
+  badgeDuplicate: { backgroundColor: '#FFEDD5' },
+  badgeTextDuplicate: { color: '#F97316' },
+  badgeOld: { backgroundColor: '#FEF3C7' },
+  badgeTextOld: { color: '#D97706' },
+  cardActionsTop: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  actionIconBtn: { padding: 6, borderRadius: 8 },
   infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.03)',
-    marginTop: 6
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.03)', marginTop: 6
   },
-  infoLabel: {
-    fontSize: 10,
-    textTransform: 'uppercase',
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 2
-  },
-  infoValue: {
-    fontSize: 13
-  },
-  miniBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8
-  },
-  miniBtnText: {
-    fontSize: 11,
-    fontWeight: '700'
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 40,
-    fontSize: 14
-  },
+  infoLabel: { fontSize: 10, textTransform: 'uppercase', fontWeight: '700', letterSpacing: 0.5, marginBottom: 2 },
+  infoValue: { fontSize: 13 },
+  miniBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  miniBtnText: { fontSize: 11, fontWeight: '700' },
+  emptyText: { textAlign: 'center', marginTop: 40, fontSize: 14 },
   fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 6,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6
+    position: 'absolute', right: 20, bottom: 20, width: 58, height: 58, borderRadius: 29,
+    justifyContent: 'center', alignItems: 'center', elevation: 6, shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 6
   },
-  fabText: {
-    color: '#FFF',
-    fontSize: 30,
-    lineHeight: 32
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    padding: 20
-  },
+  fabText: { color: '#FFF', fontSize: 30, lineHeight: 32 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
   modalContent: {
-    borderRadius: 18,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 8
+    borderRadius: 18, padding: 20, shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 8
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 14
-  },
-  numberInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 6,
-    width: 60,
-    textAlign: 'center',
-    fontSize: 14
-  },
-  btnGen: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  btnFull: {
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 4
-  },
-  backupBtn: {
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  strengthContainer: {
-    marginBottom: 16
-  },
-  strengthHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4
-  },
-  strengthLabelTitle: {
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  strengthLabelText: {
-    fontSize: 12,
-    fontWeight: 'bold'
-  },
-  strengthBarBg: {
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden'
-  },
-  strengthBarFill: {
-    height: '100%',
-    borderRadius: 3
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 8
-  },
-  btn: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 10
-  },
-  btnText: {
-    fontWeight: 'bold',
-    fontSize: 14
-  },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1
-  },
-  settingText: {
-    fontSize: 15
-  },
-  sectionHeader: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    marginTop: 22,
-    marginBottom: 6
-  },
-  auditContainer: {
-    borderWidth: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 4
-  },
-  auditItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 14
-  },
-  auditTitle: {
-    fontSize: 14,
-    fontWeight: '600'
-  },
-  auditSub: {
-    fontSize: 12,
-    marginTop: 2
-  },
-  auditRightWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  auditBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    minWidth: 65,
-    alignItems: 'center'
-  },
-  auditBadgeText: {
-    fontSize: 13,
-    fontWeight: 'bold'
-  },
-  arrowText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    width: 12,
-    textAlign: 'center'
-  },
-  arrowPlaceholder: {
-    width: 12
-  },
-  devSection: {
-    marginTop: 28,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1
-  },
-  devTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    marginBottom: 6
-  },
-  devText: {
-    fontSize: 13,
-    marginBottom: 3
-  },
-  guideHeading: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    marginTop: 16,
-    marginBottom: 4
-  },
-  guideText: {
-    fontSize: 14,
-    lineHeight: 20
-  }
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
+  input: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 12, fontSize: 14 },
+  numberInput: { borderWidth: 1, borderRadius: 8, padding: 6, width: 60, textAlign: 'center', fontSize: 14 },
+  btnGen: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  btnFull: { paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 4 },
+  backupBtn: { paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  strengthContainer: { marginBottom: 16 },
+  strengthHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  strengthLabelTitle: { fontSize: 12, fontWeight: '600' },
+  strengthLabelText: { fontSize: 12, fontWeight: 'bold' },
+  strengthBarBg: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  strengthBarFill: { height: '100%', borderRadius: 3 },
+  subTaskContainer: { borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 8 },
+  subTaskInput: { borderWidth: 1, borderRadius: 8, padding: 8, fontSize: 13 },
+  subTaskDisplayCard: { borderWidth: 1, borderRadius: 8, padding: 8, marginBottom: 4 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 8 },
+  btn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10 },
+  btnText: { fontWeight: 'bold', fontSize: 14 },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1 },
+  settingText: { fontSize: 15 },
+  sectionHeader: { fontSize: 15, fontWeight: 'bold', marginTop: 22, marginBottom: 6 },
+  auditContainer: { borderWidth: 1, borderRadius: 12, overflow: 'hidden', marginTop: 4 },
+  auditItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14 },
+  auditTitle: { fontSize: 14, fontWeight: '600' },
+  auditSub: { fontSize: 12, marginTop: 2 },
+  auditRightWrapper: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  auditBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, minWidth: 65, alignItems: 'center' },
+  auditBadgeText: { fontSize: 13, fontWeight: 'bold' },
+  arrowText: { fontSize: 13, fontWeight: 'bold', width: 12, textAlign: 'center' },
+  arrowPlaceholder: { width: 12 },
+  devSection: { marginTop: 28, padding: 16, borderRadius: 12, borderWidth: 1 },
+  devTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 6 },
+  devText: { fontSize: 13, marginBottom: 3 },
+  guideHeading: { fontSize: 15, fontWeight: 'bold', marginTop: 16, marginBottom: 4 },
+  guideText: { fontSize: 14, lineHeight: 20 }
 });
