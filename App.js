@@ -667,7 +667,7 @@ export default function App() {
                         onPress={() => handleDeletePassword(item.id)} 
                         style={[styles.expandedActionBtn, { backgroundColor: theme.dangerBg }]}
                       >
-                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#EF4444' }}>🗑️ Löschen (mit Biometrie)</Text>
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#EF4444' }}>🗑️ Löschen</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1006,7 +1006,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.9.1 (Handbuch aktualisiert)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.9.2 (Löschen-Beschriftung vereinfacht)</Text>
                 </View>
               </View>
             )}
@@ -1014,7 +1014,7 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
-      {/* Handbuch Modal (Aktualisiert) */}
+      {/* Handbuch Modal */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
