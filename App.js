@@ -59,6 +59,7 @@ export default function App() {
   const [link, setLink] = useState('');
   const [lastChangedInput, setLastChangedInput] = useState('');
   const [subTasks, setSubTasks] = useState([]);
+  const [isTrusted, setIsTrusted] = useState(false); // Neu: Als sicher markiert
 
   const usernameRef = useRef(null);
   const linkRef = useRef(null);
@@ -88,15 +89,17 @@ export default function App() {
             password: 'Password123!', 
             link: 'https://mail.example.com', 
             lastChanged: '14.11.2026',
+            isTrusted: false,
             subTasks: [{ id: 's1', name: 'Wiederherstellungs-PIN', note: '1234' }]
           },
           { 
             id: '2', 
-            title: 'GitHub', 
-            username: 'dev-user', 
-            password: '123', 
-            link: 'https://github.com', 
-            lastChanged: '01.01.2023',
+            title: 'Bank-PIN', 
+            username: '123456', 
+            password: '1234', 
+            link: '', 
+            lastChanged: '01.01.2020',
+            isTrusted: true, // Beispiel für manuell als sicher markierten Eintrag
             subTasks: []
           }
         ];
@@ -204,7 +207,7 @@ export default function App() {
         type: ['application/json', '*/*'],
         copyToCacheDirectory: true,
       });
-      if (!result.canceled && result.assets && result.assets.length >0) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         setPendingImportUri(result.assets[0].uri);
         setBackupPassword('');
         setBackupActionType('import');
@@ -280,26 +283,14 @@ export default function App() {
     }
   };
 
-  // Erkennt ob es sich um eine typische kurze PIN handelt (z.B. 4-stellige reine Ziffern oder explizit benannt)
-  const isPinCode = (item) => {
-    const isShortNumeric = /^\d{3,6}$/.test(item.password);
-    const hasPinInTitle = /pin|bank|karte|code/i.test(item.title);
-    const hasPinInSubtasks = item.subTasks && item.subTasks.some(st => /pin|code/i.test(st.name));
-    return (isShortNumeric && hasPinInTitle) || hasPinInSubtasks;
-  };
-
+  // Wenn ein Eintrag als trusted (sicher) markiert ist, gilt er als fehlerfrei
   const isPasswordWeak = (item) => {
-    if (isPinCode(item)) return false; // PINs werden als legitim und sicher eingestuft
+    if (item.isTrusted) return false;
     return item.password.length < 8;
   };
 
   const calculatePasswordStrength = (pwd) => {
     if (!pwd) return { score: 0, label: 'Leer', color: '#CBD5E1' };
-    // Wenn es eine reine 4-stellige PIN ist, werten wir sie als "PIN (Gültig)"
-    if (/^\d{4}$/.test(pwd)) {
-      return { score: 100, label: 'PIN (Gültig)', color: '#3B82F6' };
-    }
-
     let score = 0;
     if (pwd.length >= 8) score += 30;
     if (pwd.length >= 12) score += 20;
@@ -317,9 +308,10 @@ export default function App() {
     return { score, label, color };
   };
 
-  const isPasswordOlderThanOneYear = (dateStr) => {
-    if (!dateStr) return false;
-    const parts = dateStr.split('.');
+  const isPasswordOlderThanOneYear = (item) => {
+    if (item.isTrusted) return false; // Ignorieren, wenn als sicher markiert
+    if (!item.lastChanged) return false;
+    const parts = item.lastChanged.split('.');
     if (parts.length !== 3) return false;
     const day = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10) - 1;
@@ -347,6 +339,7 @@ export default function App() {
     setLink('');
     setLastChangedInput('');
     setSubTasks([]);
+    setIsTrusted(false);
     setIsModalOpen(true);
   };
 
@@ -359,6 +352,7 @@ export default function App() {
     setLink(item.link || '');
     setLastChangedInput(item.lastChanged ? item.lastChanged.replace(/\./g, '') : '');
     setSubTasks(item.subTasks ? [...item.subTasks] : []);
+    setIsTrusted(!!item.isTrusted);
     setIsModalOpen(true);
   };
 
@@ -375,7 +369,7 @@ export default function App() {
     if (editingId) {
       updatedList = updatedList.map(item => 
         item.id === editingId 
-          ? { ...item, title, username, password, link, lastChanged: formattedDate, subTasks } 
+          ? { ...item, title, username, password, link, lastChanged: formattedDate, subTasks, isTrusted } 
           : item
       );
     } else {
@@ -386,7 +380,8 @@ export default function App() {
         password,
         link,
         lastChanged: formattedDate,
-        subTasks
+        subTasks,
+        isTrusted
       };
       updatedList.push(newEntry);
     }
@@ -453,8 +448,7 @@ export default function App() {
   const getDuplicatePasswords = () => {
     const counts = {};
     passwords.forEach(p => { 
-      // Ignoriere kurze PINs bei der Duplikatsprüfung, falls z.B. 1234 mehrfach vorkommt
-      if (!/^\d{4}$/.test(p.password)) {
+      if (!p.isTrusted) { // Als sicher markierte von Duplikatsprüfung ausschließen
         counts[p.password] = (counts[p.password] || 0) + 1; 
       }
     });
@@ -463,7 +457,7 @@ export default function App() {
 
   const duplicateList = getDuplicatePasswords();
   const weakCount = passwords.filter(p => isPasswordWeak(p)).length;
-  const oldPasswordCount = passwords.filter(p => isPasswordOlderThanOneYear(p.lastChanged)).length;
+  const oldPasswordCount = passwords.filter(p => isPasswordOlderThanOneYear(p)).length;
 
   // Security Health Score Berechnung
   const calculateSecurityHealthScore = () => {
@@ -475,14 +469,10 @@ export default function App() {
     passwords.forEach(item => {
       let itemScore = maxScorePerItem;
 
-      if (isPasswordWeak(item)) {
-        itemScore -= 15;
-      }
-      if (duplicateList.includes(item.password)) {
-        itemScore -= 10;
-      }
-      if (isPasswordOlderThanOneYear(item.lastChanged)) {
-        itemScore -= 10;
+      if (!item.isTrusted) {
+        if (isPasswordWeak(item)) itemScore -= 15;
+        if (duplicateList.includes(item.password)) itemScore -= 10;
+        if (isPasswordOlderThanOneYear(item)) itemScore -= 10;
       }
 
       if (itemScore < 0) itemScore = 0;
@@ -507,7 +497,7 @@ export default function App() {
     if (!matchesSearch) return false;
     if (activeAuditFilter === 'WEAK') return isPasswordWeak(item);
     if (activeAuditFilter === 'DUPLICATES') return duplicateList.includes(item.password);
-    if (activeAuditFilter === 'OLD') return isPasswordOlderThanOneYear(item.lastChanged);
+    if (activeAuditFilter === 'OLD') return isPasswordOlderThanOneYear(item);
     return true;
   });
 
@@ -614,9 +604,9 @@ export default function App() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16 }}
         renderItem={({ item }) => {
-          const weak = isPasswordWeak(item);
-          const old = isPasswordOlderThanOneYear(item.lastChanged);
-          const isDuplicate = duplicateList.includes(item.password);
+          const weak = !item.isTrusted && isPasswordWeak(item);
+          const old = !item.isTrusted && isPasswordOlderThanOneYear(item);
+          const isDuplicate = !item.isTrusted && duplicateList.includes(item.password);
           const isExpanded = !!expandedIds[item.id];
           const hasIssues = weak || old || isDuplicate;
 
@@ -626,7 +616,7 @@ export default function App() {
               onPress={() => toggleExpand(item.id)}
               style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
             >
-              <View style={[styles.cardAccentBar, { backgroundColor: hasIssues ? '#EF4444' : theme.primary }]} />
+              <View style={[styles.cardAccentBar, { backgroundColor: item.isTrusted ? '#3B82F6' : (hasIssues ? '#EF4444' : theme.primary) }]} />
 
               <View style={styles.cardInner}>
                 <View style={styles.cardHeader}>
@@ -634,15 +624,23 @@ export default function App() {
                     <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
                     
                     <View style={styles.warningColumn}>
-                      <View style={[styles.warningBadge, styles.badgeWeak, { opacity: weak ? 1 : 0 }]}>
-                        <Text style={[styles.warningBadgeText, styles.badgeTextWeak]}>Schwach</Text>
-                      </View>
-                      <View style={[styles.warningBadge, styles.badgeDuplicate, { opacity: isDuplicate ? 1 : 0 }]}>
-                        <Text style={[styles.warningBadgeText, styles.badgeTextDuplicate]}>Doppelt</Text>
-                      </View>
-                      <View style={[styles.warningBadge, styles.badgeOld, { opacity: old ? 1 : 0 }]}>
-                        <Text style={[styles.warningBadgeText, styles.badgeTextOld]}>Veraltet</Text>
-                      </View>
+                      {item.isTrusted ? (
+                        <View style={[styles.warningBadge, { backgroundColor: '#DBEAFE' }]}>
+                          <Text style={[styles.warningBadgeText, { color: '#2563EB' }]}>Sicher</Text>
+                        </View>
+                      ) : (
+                        <>
+                          <View style={[styles.warningBadge, styles.badgeWeak, { opacity: weak ? 1 : 0 }]}>
+                            <Text style={[styles.warningBadgeText, styles.badgeTextWeak]}>Schwach</Text>
+                          </View>
+                          <View style={[styles.warningBadge, styles.badgeDuplicate, { opacity: isDuplicate ? 1 : 0 }]}>
+                            <Text style={[styles.warningBadgeText, styles.badgeTextDuplicate]}>Doppelt</Text>
+                          </View>
+                          <View style={[styles.warningBadge, styles.badgeOld, { opacity: old ? 1 : 0 }]}>
+                            <Text style={[styles.warningBadgeText, styles.badgeTextOld]}>Veraltet</Text>
+                          </View>
+                        </>
+                      )}
                     </View>
                   </View>
 
@@ -830,7 +828,7 @@ export default function App() {
 
               <TextInput
                 ref={linkRef}
-                placeholder="Web-Link (z. B. bank.de)"
+                placeholder="Web-Link (optional)"
                 placeholderTextColor={theme.subtext}
                 style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
                 value={link}
@@ -881,6 +879,15 @@ export default function App() {
                 </View>
               </View>
 
+              {/* NEU: Option zum Als sicher markieren */}
+              <View style={[styles.settingRow, { borderBottomColor: theme.border, marginVertical: 8 }]}>
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text style={[styles.settingText, { color: theme.text, fontWeight: 'bold' }]}>Als sicher markieren (Ausnahme)</Text>
+                  <Text style={{ fontSize: 11, color: theme.subtext, marginTop: 2 }}>Ignoriert Warnungen (z. B. für Bank-PINs)</Text>
+                </View>
+                <Switch value={isTrusted} onValueChange={setIsTrusted} trackColor={{ false: '#cbd5e1', true: '#3b82f6' }} />
+              </View>
+
               <View style={{ marginTop: 12, marginBottom: 16 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Text style={[styles.settingText, { color: theme.text, fontWeight: 'bold', fontSize: 14 }]}>Unteraufgaben / Zusatzfelder</Text>
@@ -892,7 +899,7 @@ export default function App() {
                 {subTasks.map((st) => (
                   <View key={st.id} style={[styles.subTaskContainer, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
                     <TextInput
-                      placeholder="Name (z.B. Karten-PIN)"
+                      placeholder="Name (z.B. PIN)"
                       placeholderTextColor={theme.subtext}
                       style={[styles.subTaskInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.cardBg }]}
                       value={st.name}
@@ -994,7 +1001,7 @@ export default function App() {
                   <TouchableOpacity style={[styles.auditItem, { borderTopWidth: 1, borderTopColor: theme.border }]} onPress={() => jumpToFilter('WEAK')} disabled={weakCount === 0}>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.auditTitle, { color: theme.text }]}>Schwache Passwörter</Text>
-                      <Text style={[styles.auditSub, { color: theme.subtext }]}>Weniger als 8 Zeichen (exkl. PINs)</Text>
+                      <Text style={[styles.auditSub, { color: theme.subtext }]}>Weniger als 8 Zeichen</Text>
                     </View>
                     <View style={styles.auditRightWrapper}>
                       <View style={[styles.auditBadge, { backgroundColor: weakCount > 0 ? '#FEE2E2' : '#D1FAE5' }]}>
@@ -1077,7 +1084,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.1.0 (PIN-Erkennung integriert)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.2.0 (Manueller Sicherheits-Schalter)</Text>
                 </View>
               </View>
             )}
@@ -1098,14 +1105,14 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Bank-PINs & Kurzzahlen</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Manuell als sicher markieren</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Kurze Codes (wie 4-stellige Bank- oder Karten-PINs) werden automatisch als gültig erkannt und nicht fälschlicherweise als „schwaches Passwort“ eingestuft, sofern sie in Einträgen mit passenden Begriffen (wie PIN, Bank, Karte) gespeichert sind.
+              Du kannst bei jedem Eintrag (z. B. für Bank-PINs oder kurze Codes) den Schalter „Als sicher markieren“ aktivieren. Dadurch werden keinerlei Warnungen (schwach, doppelt, veraltet) ausgegeben und es gibt keinen Punktabzug beim Security Health Score.
             </Text>
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Security Health Score</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Das Banner ganz oben zeigt den prozentualen Sicherheitszustand deines Tresors. Er berücksichtigt Stärke, Duplikate und Alter deiner Einträge.
+              Das Banner ganz oben zeigt dir den prozentualen Sicherheitszustand deines Tresors basierend auf allen nicht-ausgenommenen Einträgen.
             </Text>
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Dauerhafte Speicherung & Biometrie</Text>
