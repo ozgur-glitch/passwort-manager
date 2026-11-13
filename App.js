@@ -444,6 +444,40 @@ export default function App() {
   const weakCount = passwords.filter(p => isPasswordWeak(p.password)).length;
   const oldPasswordCount = passwords.filter(p => isPasswordOlderThanOneYear(p.lastChanged)).length;
 
+  // Security Health Score Berechnung (mit fairen Abzügen)
+  const calculateSecurityHealthScore = () => {
+    if (passwords.length === 0) return 100;
+
+    let totalScore = 0;
+    const maxScorePerItem = 100;
+
+    passwords.forEach(item => {
+      let itemScore = maxScorePerItem;
+
+      if (isPasswordWeak(item.password)) {
+        itemScore -= 15;
+      }
+      if (duplicateList.includes(item.password)) {
+        itemScore -= 10;
+      }
+      if (isPasswordOlderThanOneYear(item.lastChanged)) {
+        itemScore -= 10;
+      }
+
+      if (itemScore < 0) itemScore = 0;
+      totalScore += itemScore;
+    });
+
+    return Math.round(totalScore / passwords.length);
+  };
+
+  const healthScore = calculateSecurityHealthScore();
+  const getHealthColor = (score) => {
+    if (score >= 80) return '#10B981'; // Grün
+    if (score >= 50) return '#F59E0B'; // Gelb/Orange
+    return '#EF4444'; // Rot
+  };
+
   const filteredPasswords = passwords.filter(item => {
     const matchesSearch = 
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -510,7 +544,7 @@ export default function App() {
         </TouchableOpacity>
       </View>
 
-      {/* Suchleiste */}
+      {/* Suchleiste & Filter */}
       <View style={[styles.searchFilterContainer, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
         <View style={[styles.searchBarWrapper, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
           <TextInput
@@ -535,6 +569,22 @@ export default function App() {
             </TouchableOpacity>
           </View>
         )}
+      </View>
+
+      {/* Security Health Score Banner (Neu) */}
+      <View style={[styles.healthBanner, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+        <View style={styles.healthBannerLeft}>
+          <Text style={{ fontSize: 24, marginRight: 10 }}>🛡️</Text>
+          <View>
+            <Text style={[styles.healthBannerTitle, { color: theme.text }]}>Tresor-Sicherheit</Text>
+            <Text style={[styles.healthBannerSub, { color: theme.subtext }]}>
+              {healthScore >= 80 ? 'Hervorragender Schutz' : healthScore >= 50 ? 'Verbesserungswürdig' : 'Kritische Risiken vorhanden'}
+            </Text>
+          </View>
+        </View>
+        <View style={[styles.healthScoreBadge, { backgroundColor: getHealthColor(healthScore) + '20', borderColor: getHealthColor(healthScore) }]}>
+          <Text style={[styles.healthScoreText, { color: getHealthColor(healthScore) }]}>{healthScore}%</Text>
+        </View>
       </View>
 
       {/* Main List */}
@@ -1006,7 +1056,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.9.2 (Löschen-Beschriftung vereinfacht)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.0.0 (Security Health Score integriert)</Text>
                 </View>
               </View>
             )}
@@ -1014,7 +1064,7 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
-      {/* Handbuch Modal */}
+      {/* Handbuch Modal (Aktualisiert) */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -1027,19 +1077,19 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Dauerhafte Datenspeicherung</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Security Health Score</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Alle hinzugefügten, bearbeiteten oder gelöschten Passwörter und Einstellungen werden automatisch auf deinem Gerät (mittels AsyncStorage) gespeichert und bleiben auch nach dem Schließen der App erhalten.
+              Das Banner ganz oben in der Hauptansicht zeigt dir den prozentualen Sicherheitszustand deines gesamten Tresors. Jeder Eintrag startet bei 100%. Bei Mängeln wie kurzen Passwörtern (-15%), Duplikaten (-10%) oder veralteten Daten (-10%) passt sich der Score dynamisch an.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Aufklappen, Bearbeiten & Löschen</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Dauerhafte Datenspeicherung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Um Details einzusehen, musst du einen Eintrag antippen und dich biometrisch legitimieren. Erst im aufgeklappten Zustand erscheinen die Buttons zum **Bearbeiten** und **Löschen**. Das Bearbeiten öffnet sich direkt, während das Löschen zur Sicherheit eine erneute biometrische Bestätigung erfordert.
+              Alle hinzugefügten, bearbeiteten oder gelöschten Passwörter und Einstellungen werden automatisch auf deinem Gerät (mittels AsyncStorage) gespeichert.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Automatische Sortierung & Navigation</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Aufklappen, Bearbeiten & Löschen</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Deine Einträge im Tresor sortieren sich stets vollautomatisch alphabetisch aufsteigend. In den Eingabefeldern kannst du bequem per Enter/Weiter-Taste von Feld zu Feld springen.
+              Um Details einzusehen, musst du einen Eintrag antippen und dich biometrisch legitimieren. Erst im aufgeklappten Zustand erscheinen die Buttons zum **Bearbeiten** und **Löschen**.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -1082,6 +1132,16 @@ const styles = StyleSheet.create({
   clearSearchBtn: { padding: 6 },
   filterBanner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingHorizontal: 4 },
   filterBannerText: { fontSize: 12, fontWeight: 'bold', color: '#EF4444' },
+  healthBanner: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 14, borderWidth: 1,
+    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2
+  },
+  healthBannerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  healthBannerTitle: { fontSize: 15, fontWeight: 'bold' },
+  healthBannerSub: { fontSize: 12, marginTop: 2 },
+  healthScoreBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  healthScoreText: { fontSize: 16, fontWeight: 'bold' },
   card: {
     borderRadius: 14, borderWidth: 1, marginBottom: 14, overflow: 'hidden', flexDirection: 'row',
     elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4
