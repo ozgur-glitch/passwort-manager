@@ -334,14 +334,7 @@ export default function App() {
     setIsModalOpen(true);
   };
 
-  // NEU: Biometrie-Abfrage beim Öffnen des Bearbeiten-Modals
-  const handleOpenEditModal = async (item) => {
-    const success = await authenticateWithBiometrics('Identität bestätigen, um Eintrag zu bearbeiten');
-    if (!success) {
-      Alert.alert('Abgebrochen', 'Biometrische Authentifizierung erforderlich.');
-      return;
-    }
-
+  const handleOpenEditModal = (item) => {
     resetInactivityTimer();
     setEditingId(item.id);
     setTitle(item.title);
@@ -583,18 +576,12 @@ export default function App() {
                   </View>
 
                   <View style={styles.cardActionsTop}>
-                    <TouchableOpacity onPress={() => handleOpenEditModal(item)} style={[styles.actionIconBtn, { backgroundColor: theme.actionBg }]}>
-                      <Text style={{ fontSize: 14 }}>✏️</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDeletePassword(item.id)} style={[styles.actionIconBtn, { backgroundColor: theme.dangerBg }]}>
-                      <Text style={{ fontSize: 14 }}>🗑️</Text>
-                    </TouchableOpacity>
                     <Text style={{ fontSize: 14, color: theme.subtext, marginLeft: 4 }}>{isExpanded ? '▲' : '▼'}</Text>
                   </View>
                 </View>
 
                 {isExpanded && (
-                  <View style={{ marginTop: 6 }}>
+                  <View style={{ marginTop: 8 }}>
                     {item.username ? (
                       <View style={styles.infoRow}>
                         <View style={{ flex: 1, marginRight: 8 }}>
@@ -667,6 +654,22 @@ export default function App() {
                         ))}
                       </View>
                     )}
+
+                    <View style={styles.expandedActionsRow}>
+                      <TouchableOpacity 
+                        onPress={() => handleOpenEditModal(item)} 
+                        style={[styles.expandedActionBtn, { backgroundColor: theme.primaryLight }]}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme.primary }}>✏️ Bearbeiten</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity 
+                        onPress={() => handleDeletePassword(item.id)} 
+                        style={[styles.expandedActionBtn, { backgroundColor: theme.dangerBg }]}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#EF4444' }}>🗑️ Löschen (mit Biometrie)</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
               </View>
@@ -1003,7 +1006,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.8.2 (Bearbeiten biometrisch gesichert)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 3.9.1 (Handbuch aktualisiert)</Text>
                 </View>
               </View>
             )}
@@ -1011,7 +1014,7 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
-      {/* Handbuch Modal */}
+      {/* Handbuch Modal (Aktualisiert) */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -1024,14 +1027,19 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Biometrischer Schutz beim Bearbeiten</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Dauerhafte Datenspeicherung</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Das Bearbeiten (`✏️`) eines Eintrags erfordert nun zwingend eine erfolgreiche biometrische Authentifizierung, um unbefugten Zugriff auf sensible Daten zu verhindern.
+              Alle hinzugefügten, bearbeiteten oder gelöschten Passwörter und Einstellungen werden automatisch auf deinem Gerät (mittels AsyncStorage) gespeichert und bleiben auch nach dem Schließen der App erhalten.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Dauerhafte Datenspeicherung</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Aufklappen, Bearbeiten & Löschen</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Alle Daten werden sicher auf dem Gerät mittels AsyncStorage gesichert.
+              Um Details einzusehen, musst du einen Eintrag antippen und dich biometrisch legitimieren. Erst im aufgeklappten Zustand erscheinen die Buttons zum **Bearbeiten** und **Löschen**. Das Bearbeiten öffnet sich direkt, während das Löschen zur Sicherheit eine erneute biometrische Bestätigung erfordert.
+            </Text>
+
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Automatische Sortierung & Navigation</Text>
+            <Text style={[styles.guideText, { color: theme.subtext }]}>
+              Deine Einträge im Tresor sortieren sich stets vollautomatisch alphabetisch aufsteigend. In den Eingabefeldern kannst du bequem per Enter/Weiter-Taste von Feld zu Feld springen.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -1092,7 +1100,6 @@ const styles = StyleSheet.create({
   badgeOld: { backgroundColor: '#FEF3C7' },
   badgeTextOld: { color: '#D97706' },
   cardActionsTop: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  actionIconBtn: { padding: 6, borderRadius: 8 },
   infoRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.03)', marginTop: 6
@@ -1147,5 +1154,20 @@ const styles = StyleSheet.create({
   devTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 6 },
   devText: { fontSize: 13, marginBottom: 3 },
   guideHeading: { fontSize: 15, fontWeight: 'bold', marginTop: 16, marginBottom: 4 },
-  guideText: { fontSize: 14, lineHeight: 20 }
+  guideText: { fontSize: 14, lineHeight: 20 },
+  expandedActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+    paddingTop: 10
+  },
+  expandedActionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
+  }
 });
