@@ -107,7 +107,6 @@ export default function App() {
         await AsyncStorage.setItem('@passwords_key', JSON.stringify(initialDefault));
       }
 
-      // Robustes Laden des Auto-Lock Wertes
       if (storedAutoLock !== null && storedAutoLock !== undefined) {
         setAutoLockMinutes(storedAutoLock);
       } else {
@@ -131,7 +130,6 @@ export default function App() {
     }
   };
 
-  // Sofortige Speicherung bei Änderung des Auto-Lock Wertes
   const handleAutoLockChange = async (value) => {
     setAutoLockMinutes(value);
     try {
@@ -1098,7 +1096,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.4.0 (Fixes angewendet)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.5.0 (Header-Höhe vereinheitlicht)</Text>
                 </View>
               </View>
             )}
@@ -1119,14 +1117,14 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Einheitliche Boxen & Status</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Einheitliche Karten-Höhen</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Alle Listeneinträge besitzen eine feste Mindesthöhe und einheitliche vertikale Zentrierung, wodurch alle Boxen exakt gleich gross dargestellt werden.
+              Die Kopfzeilen aller Karteneinträge besitzen nun eine feste, erzwungene Höhe. Dadurch wirken alle geschlossenen Boxen vollkommen einheitlich, unabhängig davon, ob ein „Sicher“-Badge angezeigt wird oder nicht.
             </Text>
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Auto-Lock & Einstellungen</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Die Inaktivitätszeit wird nun direkt beim Ändern live gesichert und beim App-Start dauerhaft geladen.
+              Die Inaktivitätszeit wird sofort live gesichert und beim Neustart dauerhaft geladen.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -1184,10 +1182,11 @@ const styles = StyleSheet.create({
     elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4
   },
   cardAccentBar: { width: 6 },
-  cardInner: { flex: 1, paddingHorizontal: 16, paddingVertical: 14, minHeight: 56, justifyContent: 'center' }, // Erzwingt eine einheitliche Mindesthöhe
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardInner: { flex: 1, paddingHorizontal: 16, paddingVertical: 14 },
+  // Feste Höhe und vertikale Zentrierung für den Header erzwingen, damit Badges nichts verschieben:
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 32 },
   cardTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
-  warningColumn: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 8 },
+  warningColumn: { flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', gap: 4, marginLeft: 8, height: 32 },
   warningBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, minWidth: 72, alignItems: 'center', justifyContent: 'center' },
   warningBadgeText: { fontSize: 10, fontWeight: 'bold', textAlign: 'center' },
   badgeWeak: { backgroundColor: '#FEE2E2' },
@@ -1196,7 +1195,7 @@ const styles = StyleSheet.create({
   badgeTextDuplicate: { color: '#F97316' },
   badgeOld: { backgroundColor: '#FEF3C7' },
   badgeTextOld: { color: '#D97706' },
-  cardActionsTop: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  cardActionsTop: { flexDirection: 'row', gap: 6, alignItems: 'center', height: 32 },
   infoRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.03)', marginTop: 6
