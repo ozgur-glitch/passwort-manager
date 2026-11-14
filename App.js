@@ -107,10 +107,14 @@ export default function App() {
         await AsyncStorage.setItem('@passwords_key', JSON.stringify(initialDefault));
       }
 
-      if (storedAutoLock !== null) {
+      // Robustes Laden des Auto-Lock Wertes
+      if (storedAutoLock !== null && storedAutoLock !== undefined) {
         setAutoLockMinutes(storedAutoLock);
+      } else {
+        await AsyncStorage.setItem('@autolock_key', '5');
       }
-      if (storedDarkMode !== null) {
+
+      if (storedDarkMode !== null && storedDarkMode !== undefined) {
         setIsDarkMode(JSON.parse(storedDarkMode));
       }
     } catch (error) {
@@ -127,9 +131,15 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    AsyncStorage.setItem('@autolock_key', autoLockMinutes);
-  }, [autoLockMinutes]);
+  // Sofortige Speicherung bei Änderung des Auto-Lock Wertes
+  const handleAutoLockChange = async (value) => {
+    setAutoLockMinutes(value);
+    try {
+      await AsyncStorage.setItem('@autolock_key', value);
+    } catch (error) {
+      console.error('Fehler beim Speichern des Auto-Lock:', error);
+    }
+  };
 
   useEffect(() => {
     AsyncStorage.setItem('@darkmode_key', JSON.stringify(isDarkMode));
@@ -275,7 +285,10 @@ export default function App() {
       const parsedData = JSON.parse(parsedPayload.data);
       if (parsedData && Array.isArray(parsedData.passwords)) {
         await savePasswordsToStorage(parsedData.passwords);
-        if (parsedData.autoLockMinutes) setAutoLockMinutes(parsedData.autoLockMinutes);
+        if (parsedData.autoLockMinutes) {
+          setAutoLockMinutes(parsedData.autoLockMinutes);
+          await AsyncStorage.setItem('@autolock_key', parsedData.autoLockMinutes);
+        }
         if (typeof parsedData.isDarkMode === 'boolean') setIsDarkMode(parsedData.isDarkMode);
         setIsBackupModalOpen(false);
         Alert.alert('Erfolg', 'Backup erfolgreich wiederhergestellt!');
@@ -968,7 +981,7 @@ export default function App() {
                   <TextInput
                     style={[styles.numberInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
                     value={autoLockMinutes}
-                    onChangeText={setAutoLockMinutes}
+                    onChangeText={handleAutoLockChange}
                     keyboardType="numeric"
                     maxLength={3}
                   />
@@ -1085,7 +1098,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.3.0 (Kartenhöhe einheitlich)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.4.0 (Fixes angewendet)</Text>
                 </View>
               </View>
             )}
@@ -1106,19 +1119,14 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Einemheitliche Boxen & Status</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Einheitliche Boxen & Status</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Alle Listeneinträge besitzen nun feste Abstände und eine einheitliche vertikale Zentrierung, sodass Boxen mit Markierungen (wie „Sicher“) genauso gross dargestellt werden wie andere Einträge.
+              Alle Listeneinträge besitzen eine feste Mindesthöhe und einheitliche vertikale Zentrierung, wodurch alle Boxen exakt gleich gross dargestellt werden.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Security Health Score</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Auto-Lock & Einstellungen</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Das Banner ganz oben zeigt dir den prozentualen Sicherheitszustand deines Tresors basierend auf allen nicht-ausgenommenen Einträgen.
-            </Text>
-
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Dauerhafte Speicherung & Biometrie</Text>
-            <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Alle Daten einschließlich der Einstellungen (wie Auto-Lock) werden sicher auf dem Gerät gesichert.
+              Die Inaktivitätszeit wird nun direkt beim Ändern live gesichert und beim App-Start dauerhaft geladen.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -1176,11 +1184,11 @@ const styles = StyleSheet.create({
     elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4
   },
   cardAccentBar: { width: 6 },
-  cardInner: { flex: 1, padding: 16, justifyContent: 'center' },
+  cardInner: { flex: 1, paddingHorizontal: 16, paddingVertical: 14, minHeight: 56, justifyContent: 'center' }, // Erzwingt eine einheitliche Mindesthöhe
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
   warningColumn: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 8 },
-  warningBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, minWidth: 72, alignItems: 'center' },
+  warningBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, minWidth: 72, alignItems: 'center', justifyContent: 'center' },
   warningBadgeText: { fontSize: 10, fontWeight: 'bold', textAlign: 'center' },
   badgeWeak: { backgroundColor: '#FEE2E2' },
   badgeTextWeak: { color: '#EF4444' },
