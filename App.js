@@ -59,7 +59,7 @@ export default function App() {
   const [link, setLink] = useState('');
   const [lastChangedInput, setLastChangedInput] = useState('');
   const [subTasks, setSubTasks] = useState([]);
-  const [isTrusted, setIsTrusted] = useState(false); // Neu: Als sicher markiert
+  const [isTrusted, setIsTrusted] = useState(false);
 
   const usernameRef = useRef(null);
   const linkRef = useRef(null);
@@ -99,7 +99,7 @@ export default function App() {
             password: '1234', 
             link: '', 
             lastChanged: '01.01.2020',
-            isTrusted: true, // Beispiel für manuell als sicher markierten Eintrag
+            isTrusted: true,
             subTasks: []
           }
         ];
@@ -107,8 +107,12 @@ export default function App() {
         await AsyncStorage.setItem('@passwords_key', JSON.stringify(initialDefault));
       }
 
-      if (storedAutoLock) setAutoLockMinutes(storedAutoLock);
-      if (storedDarkMode) setIsDarkMode(JSON.parse(storedDarkMode));
+      if (storedAutoLock !== null) {
+        setAutoLockMinutes(storedAutoLock);
+      }
+      if (storedDarkMode !== null) {
+        setIsDarkMode(JSON.parse(storedDarkMode));
+      }
     } catch (error) {
       console.error('Fehler beim Laden der Daten:', error);
     }
@@ -283,7 +287,6 @@ export default function App() {
     }
   };
 
-  // Wenn ein Eintrag als trusted (sicher) markiert ist, gilt er als fehlerfrei
   const isPasswordWeak = (item) => {
     if (item.isTrusted) return false;
     return item.password.length < 8;
@@ -309,7 +312,7 @@ export default function App() {
   };
 
   const isPasswordOlderThanOneYear = (item) => {
-    if (item.isTrusted) return false; // Ignorieren, wenn als sicher markiert
+    if (item.isTrusted) return false;
     if (!item.lastChanged) return false;
     const parts = item.lastChanged.split('.');
     if (parts.length !== 3) return false;
@@ -448,7 +451,7 @@ export default function App() {
   const getDuplicatePasswords = () => {
     const counts = {};
     passwords.forEach(p => { 
-      if (!p.isTrusted) { // Als sicher markierte von Duplikatsprüfung ausschließen
+      if (!p.isTrusted) {
         counts[p.password] = (counts[p.password] || 0) + 1; 
       }
     });
@@ -459,7 +462,6 @@ export default function App() {
   const weakCount = passwords.filter(p => isPasswordWeak(p)).length;
   const oldPasswordCount = passwords.filter(p => isPasswordOlderThanOneYear(p)).length;
 
-  // Security Health Score Berechnung
   const calculateSecurityHealthScore = () => {
     if (passwords.length === 0) return 100;
 
@@ -879,7 +881,6 @@ export default function App() {
                 </View>
               </View>
 
-              {/* NEU: Option zum Als sicher markieren */}
               <View style={[styles.settingRow, { borderBottomColor: theme.border, marginVertical: 8 }]}>
                 <View style={{ flex: 1, marginRight: 10 }}>
                   <Text style={[styles.settingText, { color: theme.text, fontWeight: 'bold' }]}>Als sicher markieren (Ausnahme)</Text>
@@ -1084,7 +1085,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.2.0 (Manueller Sicherheits-Schalter)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.3.0 (Kartenhöhe einheitlich)</Text>
                 </View>
               </View>
             )}
@@ -1105,9 +1106,9 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Manuell als sicher markieren</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Einemheitliche Boxen & Status</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Du kannst bei jedem Eintrag (z. B. für Bank-PINs oder kurze Codes) den Schalter „Als sicher markieren“ aktivieren. Dadurch werden keinerlei Warnungen (schwach, doppelt, veraltet) ausgegeben und es gibt keinen Punktabzug beim Security Health Score.
+              Alle Listeneinträge besitzen nun feste Abstände und eine einheitliche vertikale Zentrierung, sodass Boxen mit Markierungen (wie „Sicher“) genauso gross dargestellt werden wie andere Einträge.
             </Text>
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Security Health Score</Text>
@@ -1117,7 +1118,7 @@ export default function App() {
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Dauerhafte Speicherung & Biometrie</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Alle Daten werden sicher auf dem Gerät (AsyncStorage) gesichert. Das Einsehen von Details und das Löschen erfordert eine biometrische Authentifizierung.
+              Alle Daten einschließlich der Einstellungen (wie Auto-Lock) werden sicher auf dem Gerät gesichert.
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -1175,7 +1176,7 @@ const styles = StyleSheet.create({
     elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4
   },
   cardAccentBar: { width: 6 },
-  cardInner: { flex: 1, padding: 14 },
+  cardInner: { flex: 1, padding: 16, justifyContent: 'center' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
   warningColumn: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 8 },
