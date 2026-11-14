@@ -1096,7 +1096,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.5.0 (Header-Höhe vereinheitlicht)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.6.0 (Vollständiges Handbuch)</Text>
                 </View>
               </View>
             )}
@@ -1104,7 +1104,7 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
-      {/* Handbuch Modal */}
+      {/* Handbuch Modal (Vollständig & Ausführlich) */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -1117,15 +1117,44 @@ export default function App() {
           </View>
 
           <ScrollView style={{ padding: 16 }}>
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Einheitliche Karten-Höhen</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Die Hauptansicht & Tresor-Sicherheit</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Die Kopfzeilen aller Karteneinträge besitzen nun eine feste, erzwungene Höhe. Dadurch wirken alle geschlossenen Boxen vollkommen einheitlich, unabhängig davon, ob ein „Sicher“-Badge angezeigt wird oder nicht.
+              • Tresor-Sicherheit (Health Score): Ganz oben in der Liste siehst du einen Indikator für die Sicherheit deines Tresors[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)[span_2](start_span)[span_2](end_span). Dieser berechnet sich aus dem Zustand deiner gespeicherten Passwörter. Je grüner und höher der Prozentwert, desto sicherer ist dein Tresor. Bei roten Warnungen solltest du die betroffenen Einträge überprüfen.{'\n'}
+              • Einträge aufklappen: Tippe auf einen beliebigen Listeneintrag, um die Details (Benutzername, Website, Datum, Passwort) anzuzeigen[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span)[span_5](start_span)[span_5](end_span). Hinweis: Aus Sicherheitsgründen ist hierfür je nach Geräteeinstellung eine biometrische Bestätigung (Fingerabdruck oder Gesichtserkennung) erforderlich.{'\n'}
+              • Aktionen in den Details:{'\n'}
+                - Kopieren: Kopiert den jeweiligen Wert (z. B. das Passwort oder den Benutzernamen) direkt in die Zwischenablage.{'\n'}
+                - Anzeigen/Verbergen: Blendet das echte Passwort als Klartext ein oder aus.{'\n'}
+                - Öffnen: Öffnet hinterlegte Web-Links direkt im Browser.{'\n'}
+                - Bearbeiten / Löschen: Ermöglicht das Ändern oder Entfernen des Eintrags.
             </Text>
 
-            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Auto-Lock & Einstellungen</Text>
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Einträge hinzufügen & verwalten</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              Die Inaktivitätszeit wird sofort live gesichert und beim Neustart dauerhaft geladen.
+              • Neuen Eintrag erstellen: Über den blauen Plus-Button (+) unten rechts öffnest du das Eingabeformular[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)[span_8](start_span)[span_8](end_span).{'\n'}
+              • Passwort-Generator: Nutze den Button „Generieren“ im Formular, um direkt ein sicheres, zufälliges Passwort mit frei wählbaren Kriterien zu erstellen.{'\n'}
+              • Sicherheits-Ausnahme („Als sicher markieren“): Wenn du bestimmte Einträge (wie z. B. eine kurze Bank-PIN) bewusst kurz hältst und keine Warnungen dazu erhalten möchtest, aktiviere diesen Schalter. Der Eintrag wird dann bei Sicherheitsprüfungen ignoriert.{'\n'}
+              • Unteraufgaben / Zusatzfelder: Du kannst einem Eintrag beliebig viele Unterpunkte hinzufügen (z. B. für Sicherheitsfragen, PINs oder Backup-Codes).
             </Text>
+
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>3. Einstellungen & Sicherheits-Audit</Text>
+            <Text style={[styles.guideText, { color: theme.subtext }]}>
+              Über das Zahnrad-Symbol oben rechts gelangst du in die Einstellungen, die in drei Bereiche unterteilt sind:{'\n\n'}
+              • Sicherheit & Audit:{'\n'}
+                - Auto-Lock: Bestimme hier, nach wie vielen Minuten Inaktivität der Tresor automatisch gesperrt werden soll.{'\n'}
+                - Verschlüsselte Backups: Du kannst deinen gesamten Tresor exportieren und mit einem eigenen Passwort schützen oder bestehende Backups wieder importieren.{'\n'}
+                - Passwort-Sicherheits-Check: Zeigt dir sofort an, ob du schwache Passwörter (unter 8 Zeichen), doppelt verwendete Passwörter oder veraltete Einträge (älter als 1 Jahr) im System hast. Ein Klick darauf filtert die Liste direkt entsprechend.{'\n'}
+              • Generator: Passe die Standard-Einstellungen für den Passwort-Generator an (Länge, Sonderzeichen, Zahlen, Großbuchstaben).{'\n'}
+              • Allgemein:{'\n'}
+                - Dunkelmodus (Dark Mode): Schalte zwischen hellem und dunklem Design um.{'\n'}
+                - Benutzerhandbuch: Öffnet jederzeit diesen Hilfetext.
+            </Text>
+
+            <Text style={[styles.guideHeading, { color: theme.primary }]}>4. Sicherheit & Datenschutz</Text>
+            <Text style={[styles.guideText, { color: theme.subtext }]}>
+              • Biometrischer Schutz: Die App schützt deine sensiblen Daten beim Start und vor dem Aufklappen per Biometrie (Face ID / Fingerabdruck).{'\n'}
+              • Lokale Speicherung: Alle Daten werden ausschließlich verschlüsselt auf deinem eigenen Gerät bzw. in deinen lokalen Backups gespeichert – es gibt keine Cloud-Anbindung, die deine Daten gefährden könnte.
+            </Text>
+            <View style={{ height: 30 }} />
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -1183,7 +1212,6 @@ const styles = StyleSheet.create({
   },
   cardAccentBar: { width: 6 },
   cardInner: { flex: 1, paddingHorizontal: 16, paddingVertical: 14 },
-  // Feste Höhe und vertikale Zentrierung für den Header erzwingen, damit Badges nichts verschieben:
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 32 },
   cardTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
   warningColumn: { flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', gap: 4, marginLeft: 8, height: 32 },
