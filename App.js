@@ -1096,7 +1096,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.6.0 (Vollständiges Handbuch)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.7.0 (Bereinigtes Handbuch)</Text>
                 </View>
               </View>
             )}
@@ -1104,7 +1104,7 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
-      {/* Handbuch Modal (Vollständig & Ausführlich) */}
+      {/* Handbuch Modal (Sauber und ohne Span-Codes) */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -1119,8 +1119,8 @@ export default function App() {
           <ScrollView style={{ padding: 16 }}>
             <Text style={[styles.guideHeading, { color: theme.primary }]}>1. Die Hauptansicht & Tresor-Sicherheit</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              • Tresor-Sicherheit (Health Score): Ganz oben in der Liste siehst du einen Indikator für die Sicherheit deines Tresors[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)[span_2](start_span)[span_2](end_span). Dieser berechnet sich aus dem Zustand deiner gespeicherten Passwörter. Je grüner und höher der Prozentwert, desto sicherer ist dein Tresor. Bei roten Warnungen solltest du die betroffenen Einträge überprüfen.{'\n'}
-              • Einträge aufklappen: Tippe auf einen beliebigen Listeneintrag, um die Details (Benutzername, Website, Datum, Passwort) anzuzeigen[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span)[span_5](start_span)[span_5](end_span). Hinweis: Aus Sicherheitsgründen ist hierfür je nach Geräteeinstellung eine biometrische Bestätigung (Fingerabdruck oder Gesichtserkennung) erforderlich.{'\n'}
+              • Tresor-Sicherheit (Health Score): Ganz oben in der Liste siehst du einen Indikator für die Sicherheit deines Tresors. Dieser berechnet sich aus dem Zustand deiner gespeicherten Passwörter. Je grüner und höher der Prozentwert, desto sicherer ist dein Tresor. Bei roten Warnungen solltest du die betroffenen Einträge überprüfen.{'\n'}
+              • Einträge aufklappen: Tippe auf einen beliebigen Listeneintrag, um die Details (Benutzername, Website, Datum, Passwort) anzuzeigen. Hinweis: Aus Sicherheitsgründen ist hierfür je nach Geräteeinstellung eine biometrische Bestätigung (Fingerabdruck oder Gesichtserkennung) erforderlich.{'\n'}
               • Aktionen in den Details:{'\n'}
                 - Kopieren: Kopiert den jeweiligen Wert (z. B. das Passwort oder den Benutzernamen) direkt in die Zwischenablage.{'\n'}
                 - Anzeigen/Verbergen: Blendet das echte Passwort als Klartext ein oder aus.{'\n'}
@@ -1130,7 +1130,7 @@ export default function App() {
 
             <Text style={[styles.guideHeading, { color: theme.primary }]}>2. Einträge hinzufügen & verwalten</Text>
             <Text style={[styles.guideText, { color: theme.subtext }]}>
-              • Neuen Eintrag erstellen: Über den blauen Plus-Button (+) unten rechts öffnest du das Eingabeformular[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)[span_8](start_span)[span_8](end_span).{'\n'}
+              • Neuen Eintrag erstellen: Über den blauen Plus-Button (+) unten rechts öffnest du das Eingabeformular.{'\n'}
               • Passwort-Generator: Nutze den Button „Generieren“ im Formular, um direkt ein sicheres, zufälliges Passwort mit frei wählbaren Kriterien zu erstellen.{'\n'}
               • Sicherheits-Ausnahme („Als sicher markieren“): Wenn du bestimmte Einträge (wie z. B. eine kurze Bank-PIN) bewusst kurz hältst und keine Warnungen dazu erhalten möchtest, aktiviere diesen Schalter. Der Eintrag wird dann bei Sicherheitsprüfungen ignoriert.{'\n'}
               • Unteraufgaben / Zusatzfelder: Du kannst einem Eintrag beliebig viele Unterpunkte hinzufügen (z. B. für Sicherheitsfragen, PINs oder Backup-Codes).
