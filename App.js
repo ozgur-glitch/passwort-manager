@@ -49,6 +49,7 @@ export default function App() {
 
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [backupPassword, setBackupPassword] = useState('');
+  const [backupPasswordConfirm, setBackupPasswordConfirm] = useState(''); // Neu: Bestätigungsfeld
   const [backupActionType, setBackupActionType] = useState(null);
   const [pendingImportUri, setPendingImportUri] = useState(null);
 
@@ -208,6 +209,7 @@ export default function App() {
   const handleStartExport = () => {
     resetInactivityTimer();
     setBackupPassword('');
+    setBackupPasswordConfirm(''); // Zurücksetzen
     setBackupActionType('export');
     setIsBackupModalOpen(true);
   };
@@ -222,6 +224,7 @@ export default function App() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setPendingImportUri(result.assets[0].uri);
         setBackupPassword('');
+        setBackupPasswordConfirm(''); // Zurücksetzen
         setBackupActionType('import');
         setIsBackupModalOpen(true);
       }
@@ -239,6 +242,12 @@ export default function App() {
       Alert.alert('Fehler', 'Bitte gib ein Passwort für das Backup ein.');
       return;
     }
+    // NEU: Überprüfen, ob die Passwörter übereinstimmen
+    if (backupPassword !== backupPasswordConfirm) {
+      Alert.alert('Fehler', 'Die Passwörter stimmen nicht überein. Bitte überprüfe deine Eingabe.');
+      return;
+    }
+
     try {
       const rawData = JSON.stringify({ passwords, autoLockMinutes, isDarkMode }, null, 2);
       const keyHash = await deriveKey(backupPassword);
@@ -771,7 +780,7 @@ export default function App() {
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
-      {/* Backup Password Modal */}
+      {/* Backup Password Modal (Mit Bestätigungsfeld für Export) */}
       <Modal visible={isBackupModalOpen} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.cardBg }]}>
@@ -780,12 +789,12 @@ export default function App() {
             </Text>
             <Text style={[styles.subtextCustom, { color: theme.subtext, marginBottom: 16, fontSize: 13 }]}>
               {backupActionType === 'export' 
-                ? 'Gib ein sicheres Passwort ein, um die Backup-Datei zu schützen.' 
+                ? 'Gib ein sicheres Passwort ein und bestätige es, um die Backup-Datei zu schützen.' 
                 : 'Gib das Passwort ein, mit dem dieses Backup verschlüsselt wurde.'}
             </Text>
 
             <TextInput
-              placeholder="Backup-Passwort"
+              placeholder={backupActionType === 'export' ? 'Backup-Passwort vergeben' : 'Backup-Passwort'}
               placeholderTextColor={theme.subtext}
               secureTextEntry
               style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
@@ -793,6 +802,19 @@ export default function App() {
               onChangeText={setBackupPassword}
               autoCapitalize="none"
             />
+
+            {/* NEU: Das Bestätigungsfeld wird nur beim Exportieren angezeigt */}
+            {backupActionType === 'export' && (
+              <TextInput
+                placeholder="Passwort wiederholen"
+                placeholderTextColor={theme.subtext}
+                secureTextEntry
+                style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBg }]}
+                value={backupPasswordConfirm}
+                onChangeText={setBackupPasswordConfirm}
+                autoCapitalize="none"
+              />
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.btn, { backgroundColor: theme.border }]} onPress={() => setIsBackupModalOpen(false)}>
@@ -1096,7 +1118,7 @@ export default function App() {
                   <Text style={[styles.devTitle, { color: theme.text }]}>Entwicklerinformationen</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>Entwickler: Özgür Cetin</Text>
                   <Text style={[styles.devText, { color: theme.subtext }]}>E-Mail: ozgur.cetin@web.de</Text>
-                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.7.0 (Bereinigtes Handbuch)</Text>
+                  <Text style={[styles.devText, { color: theme.subtext }]}>Version: 4.8.0 (Backup-Passwort-Bestätigung)</Text>
                 </View>
               </View>
             )}
@@ -1104,7 +1126,7 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
-      {/* Handbuch Modal (Sauber und ohne Span-Codes) */}
+      {/* Handbuch Modal */}
       <Modal visible={isGuideOpen} animationType="fade">
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
           <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
@@ -1141,7 +1163,7 @@ export default function App() {
               Über das Zahnrad-Symbol oben rechts gelangst du in die Einstellungen, die in drei Bereiche unterteilt sind:{'\n\n'}
               • Sicherheit & Audit:{'\n'}
                 - Auto-Lock: Bestimme hier, nach wie vielen Minuten Inaktivität der Tresor automatisch gesperrt werden soll.{'\n'}
-                - Verschlüsselte Backups: Du kannst deinen gesamten Tresor exportieren und mit einem eigenen Passwort schützen oder bestehende Backups wieder importieren.{'\n'}
+                - Verschlüsselte Backups: Du kannst deinen gesamten Tresor exportieren und mit einem eigenen Passwort (inkl. Pflicht-Bestätigung zur Vermeidung von Tippfehlern) schützen oder bestehende Backups wieder importieren.{'\n'}
                 - Passwort-Sicherheits-Check: Zeigt dir sofort an, ob du schwache Passwörter (unter 8 Zeichen), doppelt verwendete Passwörter oder veraltete Einträge (älter als 1 Jahr) im System hast. Ein Klick darauf filtert die Liste direkt entsprechend.{'\n'}
               • Generator: Passe die Standard-Einstellungen für den Passwort-Generator an (Länge, Sonderzeichen, Zahlen, Großbuchstaben).{'\n'}
               • Allgemein:{'\n'}
